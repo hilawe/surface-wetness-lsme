@@ -45,8 +45,9 @@ Hilawe Semunegus (NOAA National Centers for Environmental Information) is
 the Principal Investigator. The GridSat-B1 infrared cloud product is
 provided and maintained by Kenneth R. Knapp (NOAA NCEI), and the GridSat-B1
 infrared time series and the machine-learning cloud mask used here are his
-work; the cloud mask was developed under a NASA Earth Science Data Systems
-course collaboration.
+work. The cloud mask was developed in an Earth Science Data Science course
+at the North Carolina Institute for Climate Studies (NCICS), which is
+co-located with NCEI in Asheville, North Carolina.
 
 The multi-decadal extension awaits additional GridSat-B1 years and the
 inter-satellite drift handling that a multi-satellite anomaly requires.
