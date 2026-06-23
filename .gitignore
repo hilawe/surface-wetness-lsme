@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data and large build artifacts (never committed).
+data/
+scratch/
+*.nc
+*.tar
+*.gz

@@ -1,0 +1,25 @@
+Land Surface Microwave Emissivity (LSME) from SSM/I and GridSat-B1 - processing source
+
+This work was prepared by an employee of the U.S. Government (NOAA National
+Centers for Environmental Information) as part of that employee's official
+duties. Under 17 U.S.C. 105, works of the U.S. Government are not subject to
+copyright protection in the United States.
+
+To the extent that any copyright may exist (for example outside the United
+States, or in third-party contributions), the authors dedicate the work to the
+public domain under the Creative Commons Zero 1.0 Universal (CC0 1.0) Public
+Domain Dedication:
+
+    https://creativecommons.org/publicdomain/zero/1.0/
+
+The GridSat-B1 infrared cloud product used as one of the two NOAA-stewarded
+inputs to this work is provided and maintained by Kenneth R. Knapp (NOAA NCEI).
+The microwave + infrared land surface emissivity inversion approach follows the
+published work of Prigent, Rossow, Aires, and colleagues, with the TELSEM2
+climatology of Aires et al. (2011) as the validation reference.
+
+The software is provided "as is", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability, fitness
+for a particular purpose, and noninfringement. In no event shall the authors or
+copyright holders be liable for any claim, damages, or other liability arising
+from, out of, or in connection with the software or its use.
