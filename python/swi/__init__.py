@@ -1,4 +1,4 @@
-"""LSME (land surface microwave emissivity) from SSM/I and GridSat-B1.
+"""LSME (land surface microwave emissivity) from microwave imagers and geostationary IR data.
 
 A microwave + infrared land surface emissivity inversion (Prigent and Rossow
 lineage) driven by two NOAA-stewarded climate data record inputs: the
