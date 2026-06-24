@@ -1,4 +1,4 @@
-# Land Surface Microwave Emissivity (LSME) from SSM/I and GridSat-B1
+# Land Surface Microwave Emissivity (LSME) from microwave imagers and geostationary IR data
 
 [![tests](https://github.com/hilawe/surface-wetness-lsme/actions/workflows/ci.yml/badge.svg)](https://github.com/hilawe/surface-wetness-lsme/actions/workflows/ci.yml)
 
