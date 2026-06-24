@@ -43,11 +43,11 @@ GridSat-B1 thermal-inertia diurnal range.
 
 Hilawe Semunegus (NOAA National Centers for Environmental Information) is
 the Principal Investigator. The GridSat-B1 infrared cloud product is
-provided and maintained by Kenneth R. Knapp (NOAA NCEI), and the GridSat-B1
-infrared time series and the machine-learning cloud mask used here are his
-work. The cloud mask was developed in an Earth Science Data Science course
-at the North Carolina Institute for Climate Studies (NCICS), which is
-co-located with NCEI in Asheville, North Carolina.
+provided and maintained by Ken Knapp (formerly NOAA NCEI), and the 
+GridSat-B1 infrared time series. The machine learning cloud mask was 
+developed Ken Knapp, Hilawe Semunegus, Ken Knapp and Xuepeng (Tom) Zhao 
+in an Earth Science Data Science course at the North Carolina 
+Institute for Climate Studies (NCICS).
 
 The multi-decadal extension awaits additional GridSat-B1 years and the
 inter-satellite drift handling that a multi-satellite anomaly requires.
