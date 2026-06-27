@@ -29,7 +29,8 @@ def main(argv):
     month = 7
 
     lat, lon, tb, sensor = io_csu_grid.read_channels(path, pass_=pass_)
-    ts, ts_label, t_atm, _, tcwv, _, clear, _ = build_inputs(path, lat, lon, argv)
+    ts, ts_label, t_atm, _, tcwv, _, clear, _ = build_inputs(path, lat, lon, argv,
+                                                              pass_=pass_)
     r = lsme.derive_emissivity(tb, ts, tcwv_mm=tcwv, t_atm=t_atm, clear=clear)
     print(f"file   : {path}")
     print(f"sensor : {sensor}   pass: {pass_}   solved: {r['n_clear']:,} px")

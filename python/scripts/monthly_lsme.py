@@ -61,11 +61,22 @@ def main(argv):
     ym = f"{year}{month:02d}"
     days_arg = opt(argv, "--days", "all")
     days = discover_days(f13dir, ym) if days_arg == "all" else days_arg.split(",")
+    # Optional 85 GHz scattering screen. --scatter-screen with no value uses the
+    # calibrated default; --scatter-screen K uses threshold K (Kelvin).
+    scatter_k = None
+    if "--scatter-screen" in argv:
+        i = argv.index("--scatter-screen")
+        nxt = argv[i + 1] if i + 1 < len(argv) else None
+        try:
+            scatter_k = float(nxt)
+        except (TypeError, ValueError):
+            scatter_k = lsme.SI37_DEFAULT_K
 
     print(f"f13-dir      : {f13dir}")
     print(f"gridsat-root : {gridsat_root}")
     print(f"period       : {year}-{month:02d}")
     print(f"pass         : {pass_}")
+    print(f"scatter-screen: {'off' if scatter_k is None else f'{scatter_k:g} K (37V-85V)'}")
     print(f"days ({len(days)}) : {' '.join(days)}\n")
 
     build_argv = [argv[0], "--gridsat", gridsat_root]
@@ -79,13 +90,14 @@ def main(argv):
             continue
         lat, lon, tb, _ = io_csu_grid.read_channels(f13, pass_=pass_)
         ts, _, t_atm, _, tcwv, _, clear, clear_label = build_inputs(
-            f13, lat, lon, build_argv)
+            f13, lat, lon, build_argv, pass_=pass_)
         if "GridSat" not in clear_label:
             # GridSat Ts/mask unavailable for this day; do not fold a
             # placeholder-Ts emissivity into the composite.
             skipped.append((dd, "no GridSat Ts"))
             continue
-        r = lsme.derive_emissivity(tb, ts, clear=clear, tcwv_mm=tcwv, t_atm=t_atm)
+        r = lsme.derive_emissivity(tb, ts, clear=clear, tcwv_mm=tcwv, t_atm=t_atm,
+                                   scatter_screen_k=scatter_k)
         e = r["emissivity"]
         if sum_e is None:
             sum_e = np.zeros_like(e)
