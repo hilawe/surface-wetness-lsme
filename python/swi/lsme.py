@@ -109,9 +109,12 @@ def apparent_emissivity(tb, ts):
 # Default 85 GHz scattering-screen threshold (Kelvin). A pixel is flagged as
 # scattering-contaminated when the 37V-minus-85V depression exceeds this, because
 # ice scattering near deep convection drives 85V well below the less-affected
-# 37V. Calibrated on F-13 July 1998 against TELSEM: a threshold near 8 K lifts the
-# tropical-land 85V pattern correlation by about 0.05 while retaining ~98 percent
-# of clear-land pixels. See docs/Scattering_Screen_85GHz.md.
+# 37V. The default 8.0 K was originally chosen by inspection on F-13 July 1998
+# against TELSEM agreement, which the 2026-06-26 adversarial review correctly
+# flagged as circular (tuned on TELSEM, then evaluated against TELSEM). Use
+# tune_si37_threshold() with a held-out tuning subset to choose this honestly,
+# and report screen-off as the headline number with screen-on as sensitivity.
+# See docs/Scattering_Screen_85GHz.md.
 SI37_DEFAULT_K = 8.0
 
 
@@ -137,6 +140,68 @@ def scattering_keep_mask(tb, threshold_k=SI37_DEFAULT_K):
     """
     si37 = scattering_index_si37(tb)
     return ~(si37 >= threshold_k)
+
+
+def tune_si37_threshold(tb_tune, candidates=None, target_keep_fraction=0.98):
+    """Pick the scattering-screen threshold from data, without using TELSEM.
+
+    The screen is intended to remove obvious ice-scattering pixels (large
+    positive 37V-minus-85V depressions) while keeping near-all the rest. Tuning
+    on a target keep-fraction of the tuning data avoids the circularity flagged
+    by the 2026-06-26 adversarial review (the previous 8.0 K default was chosen
+    on TELSEM agreement, which is the same reference the screened result is
+    then reported against). Here we pick the threshold from a CDF of the
+    in-data scattering-index distribution: the threshold is the value at the
+    target percentile of finite si37 over the tuning set. By construction the
+    screen then keeps about target_keep_fraction of the tuning pixels.
+
+    Parameters
+    ----------
+    tb_tune : (..., 7) array of brightness temperatures, the tuning subset
+        (for example a held-out set of days, a different month, or a different
+        satellite from the reporting set). Does NOT involve TELSEM.
+    candidates : optional 1-D array of candidate threshold values to evaluate
+        in addition to the percentile pick. The percentile threshold is always
+        returned; candidates are evaluated for their keep-fractions only.
+    target_keep_fraction : float, default 0.98. Aim to retain this fraction of
+        the tuning pixels under the chosen threshold.
+
+    Returns
+    -------
+    dict with keys:
+        threshold_k : tuned threshold in Kelvin
+        keep_fraction : actual keep-fraction at the tuned threshold (close to
+            target by construction)
+        n_tune : number of finite si37 pixels in the tuning data
+        candidates : if provided, a list of (candidate_K, keep_fraction)
+
+    Notes
+    -----
+    A target_keep_fraction near 0.98 reproduces the operational behaviour of
+    the original 8.0 K choice on F-13 July 1998 (which kept about 98 percent
+    of clear-land pixels) without using TELSEM. Choosing lower values screens
+    more aggressively at the cost of dropping more clean pixels.
+    """
+    si = scattering_index_si37(tb_tune)
+    finite = np.isfinite(si)
+    n = int(finite.sum())
+    if n < 100:
+        raise ValueError("not enough finite si37 pixels in tune set "
+                         f"(got {n}, need at least 100)")
+    flat = si[finite]
+    threshold = float(np.quantile(flat, target_keep_fraction))
+    keep_frac = float(np.mean(flat < threshold))
+    out = {
+        "threshold_k": threshold,
+        "keep_fraction": keep_frac,
+        "n_tune": n,
+    }
+    if candidates is not None:
+        cand_list = []
+        for k in np.asarray(candidates).flatten():
+            cand_list.append((float(k), float(np.mean(flat < k))))
+        out["candidates"] = cand_list
+    return out
 
 
 def derive_emissivity(tb, ts, clear=None, tcwv_mm=None, t_atm=None, lapse=10.0,

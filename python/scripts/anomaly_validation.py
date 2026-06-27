@@ -32,6 +32,22 @@ the arcs in the per-cell map.
 hyper-arid deserts, have essentially no seasonal cycle, so the anomaly correlation
 there is noise. X around 0.006 to 0.008 (emissivity units) masks the no-signal
 desert cores. The three options compose.
+
+Default (no holdout, no floor) is the screen-off baseline: the headline numbers
+reported by the original Anomaly_Form_Analysis derivation. To use a no-signal
+floor honestly, also pass:
+
+--tune-months M[,M...] (default empty) months (1-12) used to compute the TELSEM
+seasonal amplitude that the --min-signal floor is applied against. The skill
+numbers are then reported on the held-out months only (months not in the tune
+set, unless --report-months is given).
+
+--report-months M[,M...] (default: complement of --tune-months) months used to
+score skill. Defaults to whatever months are not in --tune-months when a tuning
+split is given.
+
+Without --tune-months a --min-signal > 0 run prints a leakage warning: the floor
+is being chosen from the same months it is reported against.
 """
 
 import glob
@@ -61,6 +77,13 @@ def discover(emis_dir):
     return out
 
 
+def _parse_month_csv(s):
+    """Parse a comma-separated list of month numbers like '1,4,7,10' into a set."""
+    if not s:
+        return set()
+    return {int(x) for x in s.split(",") if x.strip()}
+
+
 def main(argv):
     emis_dir = opt(argv, "--emis-dir", "../scratch/lsme_monthly")
     telsem_dir = opt(argv, "--telsem", "../data/telsem2")
@@ -68,6 +91,8 @@ def main(argv):
     min_days = int(opt(argv, "--min-days", "1"))
     coarsen = int(opt(argv, "--coarsen", "1"))
     min_signal = float(opt(argv, "--min-signal", "0"))
+    tune_months = _parse_month_csv(opt(argv, "--tune-months", ""))
+    report_months = _parse_month_csv(opt(argv, "--report-months", ""))
     os.makedirs(out, exist_ok=True)
 
     months = discover(emis_dir)
@@ -76,6 +101,39 @@ def main(argv):
         return 1
     labels = [f"{y}-{m:02d}" for y, m, _ in months]
     print(f"months ({len(months)}): " + ", ".join(labels))
+
+    # Tuning / reporting split. If --tune-months is given, the --min-signal floor
+    # is chosen from TELSEM seasonal std on those months only, and the skill
+    # numbers are reported on the report-months (default: months NOT in tune).
+    # Without --tune-months the floor (if any) is in-sample on every month and
+    # the run prints a clear note about the leakage.
+    avail = [m for _, m, _ in months]
+    if tune_months:
+        if not report_months:
+            report_months = set(avail) - tune_months
+        tune_idx = np.array([m in tune_months for m in avail], dtype=bool)
+        report_idx = np.array([m in report_months for m in avail], dtype=bool)
+        if not report_idx.any():
+            print("no months left for reporting after --tune-months and "
+                  "--report-months; pick different sets")
+            return 1
+        if tune_idx.sum() < 2:
+            # temporal_mean uses min_valid=2 by default, so a one-month tune
+            # baseline is NaN everywhere and the anomaly metrics collapse to
+            # NaN silently. Fail loud instead.
+            print(f"--tune-months selects {int(tune_idx.sum())} month(s) but "
+                  "the per-cell baseline needs at least 2 valid months to be "
+                  "defined. Pick at least two tune months.")
+            return 1
+        print(f"holdout split: tune on {sorted(tune_months)}, report on "
+              f"{sorted(m for m in avail if report_idx[avail.index(m)])}")
+    else:
+        tune_idx = np.ones(len(avail), dtype=bool)
+        report_idx = tune_idx.copy()
+        if min_signal > 0:
+            print("WARN: --min-signal > 0 chosen on the same months it is "
+                  "reported against (in-sample). Pass --tune-months to split "
+                  "honestly.")
 
     lat = lon = None
     lsme_list = []
@@ -120,23 +178,48 @@ def main(argv):
         # noise (often negative). Drop those channel-cells, which are the hyper-arid
         # deserts. The gate is on TELSEM because it is the trustworthy reference
         # amplitude; the derived field's noise can carry spurious variance.
+        # Compute the floor on TUNE months only so the same TELSEM data is not
+        # both selecting the cells and being scored against, then APPLY the
+        # resulting cell mask to the full stack.
         with np.errstate(invalid="ignore"):
-            tsig = np.nanstd(telsem_stack, axis=0)
+            tsig = np.nanstd(telsem_stack[tune_idx], axis=0)
         low = tsig < min_signal
         lsme_stack = np.where(low[None], np.nan, lsme_stack)
         telsem_stack = np.where(low[None], np.nan, telsem_stack)
-        print(f"signal floor: TELSEM seasonal std >= {min_signal:g}; "
-              f"masked {100 * float(low.mean()):.1f}% of channel-cells as no-signal")
+        scope = "all months" if tune_idx.all() else f"tune months only ({int(tune_idx.sum())}/{len(avail)})"
+        print(f"signal floor: TELSEM seasonal std >= {min_signal:g} "
+              f"({scope}); masked {100 * float(low.mean()):.1f}% of channel-cells as no-signal")
 
-    lsme_anom = anomaly.temporal_anomaly(lsme_stack)
-    telsem_anom = anomaly.temporal_anomaly(telsem_stack)
+    # Per-cell anomaly baseline is computed on TUNE months only and subtracted
+    # from the full stack, so the per-cell mean used to define each report
+    # month's anomaly is not informed by the report months themselves. When no
+    # tuning split is given, this reduces to the original full-stack baseline.
+    lsme_baseline = anomaly.temporal_mean(lsme_stack[tune_idx])
+    telsem_baseline = anomaly.temporal_mean(telsem_stack[tune_idx])
+    lsme_anom = lsme_stack - lsme_baseline
+    telsem_anom = telsem_stack - telsem_baseline
+
+    # Restrict scoring to the reporting months. The baseline is fixed (tune set
+    # only), so the report-month anomalies are honestly held out when a split
+    # is active. Skill metrics are computed on the report-month slice.
+    if not report_idx.all():
+        lsme_anom = lsme_anom[report_idx]
+        telsem_anom = telsem_anom[report_idx]
+        lsme_stack_report = lsme_stack[report_idx]
+        telsem_stack_report = telsem_stack[report_idx]
+        report_labels = [labels[i] for i in range(len(labels)) if report_idx[i]]
+        print(f"scoring on heldout months: {', '.join(report_labels)}")
+    else:
+        lsme_stack_report = lsme_stack
+        telsem_stack_report = telsem_stack
 
     rows = []
     for c in range(N_CHANNELS):
-        # pooled absolute skill over land and all months (dominated by the static
-        # spatial pattern), then the anomaly skill on the same cells.
+        # pooled absolute skill over land (dominated by the static spatial
+        # pattern), then the anomaly skill on the same cells. Both are computed
+        # on the report months only when a holdout split is in effect.
         _, abs_agg = anomaly.anomaly_pattern_skill(
-            lsme_stack[..., c], telsem_stack[..., c], mask=land)
+            lsme_stack_report[..., c], telsem_stack_report[..., c], mask=land)
         per, an_agg = anomaly.anomaly_pattern_skill(
             lsme_anom[..., c], telsem_anom[..., c], mask=land)
         rows.append({"ch": CHANNEL_NAMES[c], "abs_r": abs_agg["pearson_r"],
@@ -150,11 +233,12 @@ def main(argv):
               f"{r['anom_rho']:>9.3f} {r['anom_rmse']:>10.4f}")
 
     # per-cell temporal anomaly correlation map for a strong window channel (37H),
-    # when there are enough months to define it per cell.
+    # when there are enough months to define it per cell. Computed on the report
+    # months when a holdout split is in effect.
     c37h = CHANNEL_NAMES.index("37H")
-    min_n = max(2, lsme_stack.shape[0] // 2)
+    min_n = max(2, lsme_stack_report.shape[0] // 2)
     rmap, nmap = validate.temporal_anomaly_correlation(
-        lsme_stack[..., c37h], telsem_stack[..., c37h], min_n=min_n)
+        lsme_stack_report[..., c37h], telsem_stack_report[..., c37h], min_n=min_n)
     rmap = np.where(land, rmap, np.nan)
     med = float(np.nanmedian(rmap)) if np.isfinite(rmap).any() else float("nan")
     print(f"\nper-cell temporal anomaly r (37H, min_n={min_n}): "
