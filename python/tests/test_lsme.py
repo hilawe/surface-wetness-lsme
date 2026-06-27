@@ -110,3 +110,37 @@ def test_scatter_screen_none_is_bit_identical():
     a = lsme.derive_emissivity(tb, ts)["emissivity"]
     b = lsme.derive_emissivity(tb, ts, scatter_screen_k=None)["emissivity"]
     assert np.array_equal(np.nan_to_num(a), np.nan_to_num(b))
+
+
+def test_tune_si37_threshold_picks_a_data_based_keep_fraction():
+    """The tuned threshold should keep about target_keep_fraction of pixels."""
+    rng = np.random.default_rng(0)
+    # Gaussian-ish si37 around 0 K, with a heavy positive tail for scattering.
+    n = 5000
+    tb = np.zeros((n, 7))
+    tb[:, 3] = 220.0 + rng.normal(0, 2, n)                   # 37V
+    tail_size = n // 50
+    si85_offset = np.zeros(n)
+    si85_offset[:tail_size] = rng.uniform(10, 30, tail_size)  # ice-scattering tail
+    tb[:, 5] = tb[:, 3] - rng.normal(0, 2, n) - si85_offset   # 85V depressed by tail
+    out = lsme.tune_si37_threshold(tb, target_keep_fraction=0.95)
+    # Roughly 95 percent kept by construction. n_tune is the finite pixel count.
+    assert 0.93 <= out["keep_fraction"] <= 0.97
+    assert out["n_tune"] == n
+    # The threshold should be in the scattering-tail range (well above 0).
+    assert 2.0 < out["threshold_k"] < 25.0
+
+
+def test_tune_si37_threshold_evaluates_candidates():
+    """The candidates list reports each candidate's keep-fraction in the tune data."""
+    rng = np.random.default_rng(1)
+    n = 3000
+    tb = np.zeros((n, 7))
+    tb[:, 3] = 250.0 + rng.normal(0, 1, n)
+    tb[:, 5] = tb[:, 3] - rng.normal(2, 3, n)
+    out = lsme.tune_si37_threshold(tb, candidates=[0, 5, 10, 20],
+                                   target_keep_fraction=0.99)
+    assert "candidates" in out and len(out["candidates"]) == 4
+    # Larger thresholds keep more pixels (monotonic).
+    fracs = [k_frac for _, k_frac in out["candidates"]]
+    assert all(fracs[i] <= fracs[i + 1] for i in range(len(fracs) - 1))

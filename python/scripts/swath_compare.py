@@ -44,11 +44,16 @@ def load_stacks(emis_dir, telsem_dir):
     return lat, lon, np.stack(lsme, 0), np.stack(tel, 0)
 
 
-def rmap_37h(lsme_stack, telsem_stack, lat, lon, coarsen, min_signal=0.0):
+def rmap_37h(lsme_stack, telsem_stack, lat, lon, coarsen, min_signal=0.0,
+             tune_idx=None, report_idx=None):
     """37H per-cell temporal anomaly correlation, optionally coarsened and masked.
 
-    coarsen blocks the grid; min_signal drops cells where the TELSEM 37H seasonal
-    amplitude is below the floor (the no-signal deserts).
+    coarsen blocks the grid. min_signal drops cells where the TELSEM 37H seasonal
+    amplitude (computed on the tune subset only) is below the floor. tune_idx and
+    report_idx are boolean per-month masks; when given, the floor is chosen on
+    tune_idx months and the per-cell correlation is reported on report_idx months,
+    so the same TELSEM data is not both selecting cells and being scored against.
+    Defaults run on all months (in-sample, leaky if min_signal > 0).
     """
     land = telsem.land_mask(lat, lon)
     if coarsen > 1:
@@ -61,12 +66,17 @@ def rmap_37h(lsme_stack, telsem_stack, lat, lon, coarsen, min_signal=0.0):
                                    coarsen, 1) >= 0.5)
     c = CHANNEL_NAMES.index("37H")
     a, b = lsme_stack[..., c], telsem_stack[..., c]
+    if tune_idx is None:
+        tune_idx = np.ones(a.shape[0], dtype=bool)
+    if report_idx is None:
+        report_idx = tune_idx.copy()
     if min_signal > 0:
         with np.errstate(invalid="ignore"):
-            low = np.nanstd(b, axis=0) < min_signal
+            low = np.nanstd(b[tune_idx], axis=0) < min_signal
         a = np.where(low[None], np.nan, a)
         b = np.where(low[None], np.nan, b)
-    rmap, _ = validate.temporal_anomaly_correlation(a, b, min_n=max(2, a.shape[0] // 2))
+    a_r, b_r = a[report_idx], b[report_idx]
+    rmap, _ = validate.temporal_anomaly_correlation(a_r, b_r, min_n=max(2, a_r.shape[0] // 2))
     rmap = np.where(land, rmap, np.nan)
     return lat, lon, rmap
 
@@ -81,10 +91,11 @@ def main(argv):
 
     configs = [(1, 0.0, "native 0.25 deg (orbital arcs)"),
                (2, 0.0, "coarsened to 0.5 deg (arcs averaged out)"),
-               (2, 0.006, "0.5 deg plus signal floor 0.006 (no-signal deserts masked)")]
+               (2, 0.006, "0.5 deg plus signal floor 0.006, in-sample sensitivity")]
     fig, axes = plt.subplots(3, 1, figsize=(13, 13))
-    fig.suptitle("Per-cell temporal anomaly correlation, 37H (LSME vs TELSEM): "
-                 "swath sampling, coarsening, and the no-signal mask", fontsize=13)
+    fig.suptitle("Per-cell temporal anomaly correlation, 37H (LSME vs TELSEM). "
+                 "Bottom panel: in-sample sensitivity (no tuning split), not the "
+                 "headline number", fontsize=13)
     for ax, (coarsen, ms, tag) in zip(axes, configs):
         lat, lon, rmap = rmap_37h(lsme_stack, telsem_stack, lat0, lon0, coarsen, ms)
         med = float(np.nanmedian(rmap))
