@@ -161,3 +161,21 @@ def test_regrid_nearest_wraps_at_dateline():
     out2 = val.regrid_nearest(src_lat, src_lon, field,
                               np.array([0.0]), np.array([359.5]))
     assert out2[0, 0] in (10.0, 50.0)
+
+
+def test_regrid_nearest_wraps_past_source_max():
+    """Regression for a subtle wrap bug: when the source has no near-360 endpoint
+    (max is 270 here) and the destination longitude is above the source max, the
+    nearest neighbor is the wrapped first column (1), not the clipped last column
+    (270). The earlier implementation clipped searchsorted to size - 1 and missed
+    the wrap, so 350 collapsed onto 270 instead of wrapping to 1.
+    """
+    src_lat = np.array([0.0])
+    src_lon = np.array([1.0, 90.0, 180.0, 270.0])
+    field = np.array([[10.0, 20.0, 30.0, 40.0]])
+    out = val.regrid_nearest(src_lat, src_lon, field,
+                             np.array([0.0]), np.array([350.0]))
+    assert out[0, 0] == 10.0          # 350 is 11 deg from 1, 80 deg from 270
+    out2 = val.regrid_nearest(src_lat, src_lon, field,
+                              np.array([0.0]), np.array([359.5]))
+    assert out2[0, 0] == 10.0         # 359.5 is 1.5 deg from 1, 89.5 deg from 270

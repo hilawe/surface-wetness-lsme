@@ -38,20 +38,24 @@ def regrid_nearest(src_lat, src_lon, src, dst_lat, dst_lon):
     src_n = src[:, order]
     dst_lon360 = dst_lon % 360.0
     ilat = np.clip(np.searchsorted(src_lat, dst_lat), 0, src_lat.size - 1)
-    ilon = np.clip(np.searchsorted(src_lon_n, dst_lon360), 0, src_lon_n.size - 1)
-    # refine: searchsorted gives the insertion point, pick the closer neighbor.
-    # For longitude, the closer neighbor includes the wrap-around case.
-    for idx, coord, src_c in ((ilat, dst_lat, src_lat),):
-        left = np.clip(idx - 1, 0, src_c.size - 1)
-        choose_left = np.abs(src_c[left] - coord) < np.abs(src_c[idx] - coord)
-        idx[choose_left] = left[choose_left]
-    # Longitude refinement, with wrap-around distance.
+    # Latitude refinement (non-circular).
+    left_lat = np.clip(ilat - 1, 0, src_lat.size - 1)
+    choose_left_lat = np.abs(src_lat[left_lat] - dst_lat) < np.abs(src_lat[ilat] - dst_lat)
+    ilat[choose_left_lat] = left_lat[choose_left_lat]
+    # Longitude refinement with wrap on BOTH ends. searchsorted returns an
+    # insertion point in [0, N]; the two candidate neighbors are that point mod N
+    # (which wraps to 0 when the destination is past the source's max) and one
+    # less mod N (which wraps to N-1 when the destination is below the source's
+    # min). Compare with great-circle longitude distance and pick the closer.
     def _lon_dist(a, b):
         d = np.abs(a - b) % 360.0
         return np.minimum(d, 360.0 - d)
-    left = (ilon - 1) % src_lon_n.size
-    choose_left = _lon_dist(src_lon_n[left], dst_lon360) < _lon_dist(src_lon_n[ilon], dst_lon360)
-    ilon[choose_left] = left[choose_left]
+    ilon_raw = np.searchsorted(src_lon_n, dst_lon360)
+    right = ilon_raw % src_lon_n.size
+    left = (ilon_raw - 1) % src_lon_n.size
+    d_left = _lon_dist(src_lon_n[left], dst_lon360)
+    d_right = _lon_dist(src_lon_n[right], dst_lon360)
+    ilon = np.where(d_left <= d_right, left, right)
     return src_n[np.ix_(ilat, ilon)]
 
 
