@@ -34,7 +34,7 @@ them only if the first cut is promising (Step 6).
 
 import numpy as np
 
-from .channels import N_CHANNELS, CHANNEL_NAMES
+from .channels import N_CHANNELS, CHANNEL_NAMES, CH37V, CH85V
 
 # SSM/I Earth-incidence angle. The slant path lengthens the optical depth by
 # this air-mass factor relative to nadir.
@@ -106,7 +106,41 @@ def apparent_emissivity(tb, ts):
         return tb / ts
 
 
-def derive_emissivity(tb, ts, clear=None, tcwv_mm=None, t_atm=None, lapse=10.0):
+# Default 85 GHz scattering-screen threshold (Kelvin). A pixel is flagged as
+# scattering-contaminated when the 37V-minus-85V depression exceeds this, because
+# ice scattering near deep convection drives 85V well below the less-affected
+# 37V. Calibrated on F-13 July 1998 against TELSEM: a threshold near 8 K lifts the
+# tropical-land 85V pattern correlation by about 0.05 while retaining ~98 percent
+# of clear-land pixels. See docs/Scattering_Screen_85GHz.md.
+SI37_DEFAULT_K = 8.0
+
+
+def scattering_index_si37(tb):
+    """The 37V-minus-85V scattering depression (Kelvin), an ice-scattering index.
+
+    tb is a (..., 7) brightness-temperature array in Basist channel order. Large
+    positive values mark pixels where 85V is scattered down (cloud ice and
+    hydrometeors near deep convection) relative to the less-affected 37V. NaN
+    where either channel is missing.
+    """
+    tb = np.asarray(tb, dtype=np.float64)
+    return tb[..., CH37V] - tb[..., CH85V]
+
+
+def scattering_keep_mask(tb, threshold_k=SI37_DEFAULT_K):
+    """Boolean keep-mask, True where the pixel is NOT flagged as scattering.
+
+    Keeps a pixel when the 37V-minus-85V depression is below threshold_k. Pixels
+    where the index cannot be computed (missing 37V or 85V) are kept here and
+    masked later by the emissivity validity check, so this screen only ever
+    removes genuine high-scattering pixels.
+    """
+    si37 = scattering_index_si37(tb)
+    return ~(si37 >= threshold_k)
+
+
+def derive_emissivity(tb, ts, clear=None, tcwv_mm=None, t_atm=None, lapse=10.0,
+                      scatter_screen_k=None):
     """Per-channel surface emissivity over clear-sky pixels (Steps 1 and 2).
 
     Parameters
@@ -123,6 +157,11 @@ def derive_emissivity(tb, ts, clear=None, tcwv_mm=None, t_atm=None, lapse=10.0):
          Kelvin (for example ERA5 2 m temperature). None falls back to ts - lapse.
     lapse : effective skin-to-atmosphere temperature offset (K), used when t_atm
          is None.
+    scatter_screen_k : float or None. When set, also drop pixels whose
+         37V-minus-85V scattering depression exceeds this threshold (Kelvin),
+         on top of the clear-sky mask, to remove ice scattering near deep
+         convection that the cloud mask misses. None (default) leaves the
+         retrieval unchanged. SI37_DEFAULT_K is the calibrated operating point.
 
     Returns
     -------
@@ -144,6 +183,9 @@ def derive_emissivity(tb, ts, clear=None, tcwv_mm=None, t_atm=None, lapse=10.0):
         clear = np.isfinite(tb).all(axis=-1) & np.isfinite(ts)
     else:
         clear = np.asarray(clear, dtype=bool) & np.isfinite(tb).all(axis=-1) & np.isfinite(ts)
+
+    if scatter_screen_k is not None:
+        clear = clear & scattering_keep_mask(tb, threshold_k=scatter_screen_k)
 
     tau = transmissivity(tcwv_mm)
     tau = np.broadcast_to(tau, tb.shape).copy()

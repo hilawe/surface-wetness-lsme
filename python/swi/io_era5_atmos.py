@@ -106,6 +106,16 @@ def field_on_grid(path, var, dst_lat, dst_lon, day=None, mode="morning"):
         ds.close()
 
     lat, data = _flip_to_ascending(lat, data)
+    # Normalize ERA5 longitude to 0..360 and rotate the data column-wise to
+    # match. ERA5 commonly ships -180..180 while the product grid is 0..360, and
+    # passing a -180..180 axis through regrid_nearest used to collapse the
+    # eastern hemisphere onto the western edge column. regrid_nearest now also
+    # handles this internally; explicit normalization here documents the
+    # convention and makes downstream reduce_field calls unambiguous.
+    lon360 = lon % 360.0
+    order = np.argsort(lon360)
+    lon = lon360[order]
+    data = data[..., order]
     field = reduce_field(data, datetimes, lon, day=day, mode=mode)
     return validate.regrid_nearest(lat, lon, field,
                                    np.asarray(dst_lat, dtype=np.float64),

@@ -14,36 +14,69 @@ import numpy as np
 def regrid_nearest(src_lat, src_lon, src, dst_lat, dst_lon):
     """Nearest-neighbor regrid of a 2-D field onto a target grid.
 
-    src_lat, src_lon, dst_lat, dst_lon are 1-D, ascending, same longitude
-    convention (for example both 0..360). src has shape (src_lat, src_lon).
-    Returns a (dst_lat, dst_lon) array. NaNs in src propagate.
+    src_lat, src_lon, dst_lat, dst_lon are 1-D ascending. Longitude is
+    normalized to 0..360 internally so a source on -180..180 (for example ERA5)
+    regrids correctly onto a 0..360 product grid. Previously the function
+    assumed both grids shared a convention; against a 0..360 destination, every
+    cell east of 180 degrees in a -180..180 source would collapse onto the
+    western edge column, corrupting any reference fed through it.
+    src has shape (src_lat, src_lon). Returns a (dst_lat, dst_lon) array. NaNs
+    in src propagate.
     """
     src = np.asarray(src, dtype=np.float64)
+    src_lat = np.asarray(src_lat, dtype=np.float64)
+    src_lon = np.asarray(src_lon, dtype=np.float64)
+    dst_lat = np.asarray(dst_lat, dtype=np.float64)
+    dst_lon = np.asarray(dst_lon, dtype=np.float64)
     if src.shape != (src_lat.size, src_lon.size):
         raise ValueError("src shape must match (src_lat, src_lon)")
+    # Normalize longitudes to 0..360 and sort, so source and destination share a
+    # convention regardless of input. Rotate the source longitude axis to match.
+    src_lon360 = src_lon % 360.0
+    order = np.argsort(src_lon360)
+    src_lon_n = src_lon360[order]
+    src_n = src[:, order]
+    dst_lon360 = dst_lon % 360.0
     ilat = np.clip(np.searchsorted(src_lat, dst_lat), 0, src_lat.size - 1)
-    ilon = np.clip(np.searchsorted(src_lon, dst_lon), 0, src_lon.size - 1)
-    # refine: searchsorted gives the insertion point; pick the closer neighbor
-    for idx, coord, src_c in ((ilat, dst_lat, src_lat), (ilon, dst_lon, src_lon)):
+    ilon = np.clip(np.searchsorted(src_lon_n, dst_lon360), 0, src_lon_n.size - 1)
+    # refine: searchsorted gives the insertion point, pick the closer neighbor.
+    # For longitude, the closer neighbor includes the wrap-around case.
+    for idx, coord, src_c in ((ilat, dst_lat, src_lat),):
         left = np.clip(idx - 1, 0, src_c.size - 1)
         choose_left = np.abs(src_c[left] - coord) < np.abs(src_c[idx] - coord)
         idx[choose_left] = left[choose_left]
-    return src[np.ix_(ilat, ilon)]
+    # Longitude refinement, with wrap-around distance.
+    def _lon_dist(a, b):
+        d = np.abs(a - b) % 360.0
+        return np.minimum(d, 360.0 - d)
+    left = (ilon - 1) % src_lon_n.size
+    choose_left = _lon_dist(src_lon_n[left], dst_lon360) < _lon_dist(src_lon_n[ilon], dst_lon360)
+    ilon[choose_left] = left[choose_left]
+    return src_n[np.ix_(ilat, ilon)]
 
 
 def _rank(x):
-    order = np.argsort(x, kind="mergesort")
-    ranks = np.empty(len(x), dtype=np.float64)
-    ranks[order] = np.arange(len(x), dtype=np.float64)
-    return ranks
+    """Average-rank assignment with proper tie handling.
+
+    Tied values receive the average of the ranks they would have occupied. This
+    is the standard definition of rank used in Spearman correlation. An ordinal
+    rank (the previous behaviour here) was a real bug on zero-inflated fields:
+    permuting the tied zeros could swing Spearman from 1.0 to 0.16, because rank
+    skill leaked from the spatial ordering inside the ties rather than from the
+    retrieval itself.
+    """
+    from scipy.stats import rankdata
+    return rankdata(x, method="average").astype(np.float64)
 
 
 def skill_scores(a, b):
     """Pointwise skill between two 1-D arrays (already co-located, finite).
 
     Returns n, pearson_r, spearman_r (rank correlation), bias (a-b), rmse.
-    Spearman is the headline for an index-versus-physical comparison.
+    Spearman is the headline for an index-versus-physical comparison and uses
+    scipy's average-rank Spearman so it is invariant to ordering inside ties.
     """
+    from scipy.stats import spearmanr
     a = np.asarray(a, np.float64); b = np.asarray(b, np.float64)
     n = a.size
     out = {"n": int(n), "pearson_r": np.nan, "spearman_r": np.nan,
@@ -52,8 +85,10 @@ def skill_scores(a, b):
         return out
     if a.std() > 0 and b.std() > 0:
         out["pearson_r"] = float(np.corrcoef(a, b)[0, 1])
-        ra, rb = _rank(a), _rank(b)
-        out["spearman_r"] = float(np.corrcoef(ra, rb)[0, 1])
+        # spearmanr returns nan if all values in either array are tied; that is
+        # the correct undefined behaviour, propagate it.
+        rho = spearmanr(a, b).statistic
+        out["spearman_r"] = float(rho) if np.isfinite(rho) else np.nan
     out["bias"] = float((a - b).mean())
     out["rmse"] = float(np.sqrt(((a - b) ** 2).mean()))
     return out

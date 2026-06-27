@@ -69,3 +69,44 @@ def test_t_atm_shape_must_match_ts():
     tb = np.full((6, 6, N_CHANNELS), 260.0)
     with pytest.raises(ValueError):
         lsme.derive_emissivity(tb, ts, t_atm=np.full((5, 5), 270.0))
+
+
+def test_scattering_index_and_keep_mask():
+    """SI37 = 37V - 85V, and the keep-mask drops only high-depression pixels."""
+    from swi.channels import CH37V, CH85V
+    tb = np.full((3, 3, N_CHANNELS), 260.0)
+    # One scattering pixel: 85V driven well below 37V (a 20 K depression).
+    tb[1, 1, CH37V] = 265.0
+    tb[1, 1, CH85V] = 245.0
+    si = lsme.scattering_index_si37(tb)
+    assert si[1, 1] == 20.0
+    assert si[0, 0] == 0.0
+    keep = lsme.scattering_keep_mask(tb, threshold_k=8.0)
+    assert keep[0, 0] and not keep[1, 1]
+
+
+def test_scatter_screen_kwarg_drops_scattering_pixels_only():
+    """scatter_screen_k removes the scattering pixel; default off is unchanged."""
+    from swi.channels import CH37V, CH85V
+    ts = np.full((3, 3), 290.0)
+    tb = np.full((3, 3, N_CHANNELS), 270.0)
+    tb[1, 1, CH85V] = 245.0          # 37V - 85V = 25 K depression
+    tb[1, 1, CH37V] = 270.0
+    off = lsme.derive_emissivity(tb, ts)
+    on = lsme.derive_emissivity(tb, ts, scatter_screen_k=8.0)
+    # Default off keeps every valid pixel.
+    assert np.isfinite(off["emissivity"][1, 1]).all()
+    # Screen on drops the scattering pixel only.
+    assert np.isnan(on["emissivity"][1, 1]).all()
+    assert np.isfinite(on["emissivity"][0, 0]).all()
+    assert on["n_clear"] == off["n_clear"] - 1
+
+
+def test_scatter_screen_none_is_bit_identical():
+    """scatter_screen_k=None reproduces the unscreened result exactly."""
+    rng = np.random.default_rng(3)
+    ts = rng.uniform(280, 300, size=(8, 8))
+    tb = rng.uniform(230, 285, size=(8, 8, N_CHANNELS))
+    a = lsme.derive_emissivity(tb, ts)["emissivity"]
+    b = lsme.derive_emissivity(tb, ts, scatter_screen_k=None)["emissivity"]
+    assert np.array_equal(np.nan_to_num(a), np.nan_to_num(b))

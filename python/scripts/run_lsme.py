@@ -33,109 +33,35 @@ DEFAULT_FILE = "../data/f13_1998/CSU_SSMI_FCDR-GRID_V02R00_F13_D19980715.nc"
 DEFAULT_PASS = "dsc"
 
 
-def placeholder_skin_temperature(lat, lon):
-    """Stand-in T_s: smooth, warm in the tropics, cooler at the poles.
+from swi import lsme_inputs as _lsme_inputs
 
-    Deliberately independent of the brightness temperature so it cannot
-    manufacture the emissivity signal. Replaced by Ken's GridSat-B1 T_s.
+# These helpers now live in swi.lsme_inputs (A2 architecture cleanup); keep
+# thin re-exports here so the existing scripts that import from run_lsme keep
+# working unchanged.
+placeholder_skin_temperature = _lsme_inputs.placeholder_skin_temperature
+era5_field = _lsme_inputs.era5_field
+
+
+# LSST anchor and gridsat_ts also live in swi.lsme_inputs now; thin re-exports.
+_OVERPASS_LST_BY_CHAIN = _lsme_inputs._OVERPASS_LST_BY_CHAIN
+_SAT_CHAIN = _lsme_inputs._SAT_CHAIN
+_overpass_lst = _lsme_inputs.overpass_lst
+gridsat_ts = _lsme_inputs.gridsat_ts
+
+
+def _sat_id_from_csu_path(path):
+    """Extract the satellite id from a CSU FCDR-GRID filename (re-export)."""
+    return _lsme_inputs.sat_id_from_csu_path(path)
+
+
+def build_inputs(path, lat, lon, argv, pass_="dsc"):
+    """CLI-flag wrapper for swi.lsme_inputs.build_inputs.
+
+    Parses --gridsat, --era5-ts, --nominal, --all-pixels and delegates to the
+    library form. Kept here for backward compatibility with the existing
+    monthly_lsme / make_two_estimator / validate_telsem callers.
     """
-    ts_1d = 300.0 - 0.55 * np.abs(lat)          # ~300 K equator, ~250 K pole
-    return np.repeat(ts_1d[:, np.newaxis], lon.size, axis=1)
-
-
-def era5_field(path, var, lat, lon):
-    """Load one ERA5 field for this file's month on the (lat, lon) grid, or None.
-
-    Looks for ../era5_atmos/era5_atmos_<YYYYMM>.nc next to the data tree.
-    """
-    ymd = io_era5_atmos.date_from_csu_name(path)
-    if ymd is None:
-        return None
-    era5 = os.path.join(os.path.dirname(path), "..", "era5_atmos",
-                        f"era5_atmos_{ymd[0]}{ymd[1]:02d}.nc")
-    if not os.path.exists(era5):
-        return None
-    return io_era5_atmos.field_on_grid(era5, var, lat, lon, day=ymd, mode="morning")
-
-
-def gridsat_ts(arg, lat, lon, csu_path=None):
-    """Load GridSat clear-sky Ts + clear mask from --gridsat's value, or None.
-
-    arg is either a single GridSat cld FILE (one timestep) or the cld ROOT DIR
-    (with per-year subdirs); for a directory the overpass-day composite for the
-    CSU file's date is used. Returns (ts, clear) on the (lat, lon) grid or None.
-    """
-    if not arg:
-        return None
-    if os.path.isdir(arg):
-        ymd = io_era5_atmos.date_from_csu_name(csu_path) if csu_path else None
-        if ymd is None:
-            return None
-        # Ken's layout: <root>/isccp (GRIDSAT-CLOUD .nc) + <root>/ml (ML masks).
-        # Use the ISCCP dir for the .nc and the ML mask when both are present.
-        isccp = os.path.join(arg, "isccp")
-        ml_root = os.path.join(arg, "ml")
-        root = isccp if os.path.isdir(isccp) else arg
-        ml_root = ml_root if os.path.isdir(ml_root) else None
-        try:
-            return io_gridsat.day_overpass_on_grid(root, ymd[0], ymd[1], ymd[2],
-                                                   lat, lon, ml_root=ml_root)
-        except FileNotFoundError:
-            return None
-    if os.path.exists(arg):
-        return io_gridsat.ts_on_grid(arg, lat, lon)
-    return None
-
-
-def build_inputs(path, lat, lon, argv):
-    """Assemble (ts, ts_label, t_atm, t_atm_label, tcwv, tcwv_label, clear, clear_label).
-
-    Centralizes the Ts / atmospheric-temperature / water-vapour / domain choice
-    from the CLI flags, the ERA5 file, and (when given) Ken's GridSat-B1, so
-    run_lsme and validate_telsem stay in sync. Ts precedence: --gridsat (the real
-    cloud-cleared Ts) > --era5-ts (dev stand-in) > placeholder.
-    """
-    nominal = "--nominal" in argv
-    tcwv = None if nominal else era5_field(path, "tcwv", lat, lon)
-    t_atm = None if nominal else era5_field(path, "t2m", lat, lon)
-
-    gridsat_clear = None
-    ts, ts_label = placeholder_skin_temperature(lat, lon), \
-        "PLACEHOLDER smooth-latitude field (awaiting GridSat-B1)"
-    if "--gridsat" in argv:
-        g = gridsat_ts(argv[argv.index("--gridsat") + 1], lat, lon, csu_path=path)
-        if g is not None:
-            ts, gridsat_clear = g
-            ts_label = "GridSat-B1 cloud-cleared Ts (clr); mask from cld"
-        else:
-            ts_label = "PLACEHOLDER (GridSat file not found)"
-    elif "--era5-ts" in argv and not nominal:
-        skt = era5_field(path, "skt", lat, lon)
-        if skt is not None:
-            ts = skt
-            ts_label = ("ERA5 skin temperature (realistic DEV stand-in; "
-                        "NOT the final independent-IR Ts)")
-
-    if tcwv is None:
-        tcwv_label = "nominal dry atmosphere (--nominal or no ERA5 file)"
-    else:
-        f = tcwv[np.isfinite(tcwv)]
-        tcwv_label = (f"ERA5 morning-overpass field, {f.min():.1f}..{f.max():.1f} mm "
-                      f"(median {np.median(f):.1f})")
-    t_atm_label = "ts - 10 K lapse" if t_atm is None else "ERA5 2 m temperature"
-
-    # Domain: GridSat clear-sky AND land when GridSat is in use; otherwise land
-    # only by default (the TELSEM reference is a land atlas; ocean drags it down).
-    # --all-pixels disables masking.
-    if "--all-pixels" in argv:
-        clear, clear_label = None, "all valid pixels (land + ocean)"
-    elif gridsat_clear is not None:
-        clear = gridsat_clear & telsem.land_mask(lat, lon)
-        clear_label = "GridSat clear-sky AND land"
-    else:
-        clear = telsem.land_mask(lat, lon)
-        clear_label = "land only (global_land_mask)"
-    return (ts, ts_label, t_atm, t_atm_label, tcwv, tcwv_label, clear, clear_label)
+    return _lsme_inputs.build_inputs_from_argv(path, lat, lon, argv, pass_=pass_)
 
 
 def main(argv):
@@ -147,7 +73,7 @@ def main(argv):
     print(f"sensor : {sensor}   pass: {pass_}   grid: {tb.shape}")
 
     ts, ts_label, t_atm, t_atm_label, tcwv, tcwv_label, clear, clear_label = \
-        build_inputs(path, lat, lon, argv)
+        build_inputs(path, lat, lon, argv, pass_=pass_)
     print(f"Ts     : {ts_label}")
     print(f"domain : {clear_label}")
     print(f"T_atm  : {t_atm_label}")

@@ -44,6 +44,7 @@ def composite(f13dir, gridsat_root, year, month, days, pass_="dsc"):
     isccp, ml = thermal.split_root(gridsat_root)
     ym = f"{year}{month:02d}"
     se = ce = sdt = cdt = lat = lon = None
+    n_joint_19vh = None   # joint 19V-AND-19H day count, see Codex F1 fix
     used = []
     for dd in days:
         f13 = os.path.join(f13dir, f"CSU_SSMI_FCDR-GRID_V02R00_F13_D{ym}{dd}.nc")
@@ -51,7 +52,8 @@ def composite(f13dir, gridsat_root, year, month, days, pass_="dsc"):
             continue
         lat, lon, tb, _ = io_csu_grid.read_channels(f13, pass_=pass_)
         ts, _, t_atm, _, tcwv, _, clear, clbl = build_inputs(
-            f13, lat, lon, [sys.argv[0], "--gridsat", gridsat_root])
+            f13, lat, lon, [sys.argv[0], "--gridsat", gridsat_root],
+            pass_=pass_)
         if "GridSat" not in clbl:
             continue
         e = lsme.derive_emissivity(tb, ts, clear=clear, tcwv_mm=tcwv, t_atm=t_atm)["emissivity"]
@@ -63,15 +65,19 @@ def composite(f13dir, gridsat_root, year, month, days, pass_="dsc"):
         if se is None:
             se = np.zeros_like(e); ce = np.zeros_like(e)
             sdt = np.zeros_like(dT); cdt = np.zeros_like(dT)
+            n_joint_19vh = np.zeros_like(dT)
         ve = np.isfinite(e); se[ve] += e[ve]; ce[ve] += 1.0
         vd = np.isfinite(dT); sdt[vd] += dT[vd]; cdt[vd] += 1.0
+        # Joint 19V-and-19H clear-day count: BOTH channels finite on the day.
+        # This is the right denominator for any field built from V-H.
+        joint = np.isfinite(e[..., 0]) & np.isfinite(e[..., 1])
+        n_joint_19vh[joint] += 1.0
         used.append(dd)
         print(f"{month:02d}-{dd}: ok")
     e_m = np.where(ce > 0, se / np.where(ce > 0, ce, 1.0), np.nan)
     dT_m = np.where(cdt > 0, sdt / np.where(cdt > 0, cdt, 1.0), np.nan)
     print(f"composite of {len(used)} days")
-    # cdt is 2-D (dT is 2-D); ce is per-channel, take channel 0 for the count.
-    return lat, lon, e_m, dT_m, cdt, ce[:, :, 0]
+    return lat, lon, e_m, dT_m, cdt, n_joint_19vh
 
 
 def main(argv):
@@ -84,17 +90,32 @@ def main(argv):
     ym = f"{year}{month:02d}"
     days = discover_days(f13dir, ym)
 
-    lat, lon, e_m, dT_m, n_dt, n_e = composite(f13dir, gridsat_root, year, month, days)
+    lat, lon, e_m, dT_m, n_dt, n_e_19vh = composite(f13dir, gridsat_root, year, month, days)
     land = telsem.land_mask(lat, lon)
     pd = e_m[:, :, 0] - e_m[:, :, 1]                       # 19 GHz V - H
 
-    thermal_wet = two_estimator.wetness_index(dT_m, land, wet_is_low=True)
-    micro_wet = two_estimator.wetness_index(pd, land, wet_is_low=True)
+    # Codex F1 fix: enforce a minimum-support gate BEFORE rank normalization, so
+    # a cell with one clear day is not ranked with the same authority as a full
+    # month. min_days applies to BOTH the thermal-dT support and the joint-19VH
+    # support that the V-H polarization difference comes from. The threshold is
+    # written to NetCDF as `min_days` so downstream readers know what was
+    # masked.
+    min_days = int(opt(argv, "--min-days", "3"))
+    enough = (n_dt >= min_days) & (n_e_19vh >= min_days)
+    dT_m_g = np.where(enough, dT_m, np.nan)
+    pd_g = np.where(enough, pd, np.nan)
+
+    # Codex F1 fix: rank-normalize both estimators over the SHARED support, not
+    # over each estimator's own clear-sky support, so the percentiles on a
+    # shared cell reference the same population.
+    thermal_wet, micro_wet, shared = two_estimator.joint_indices(
+        dT_m_g, pd_g, land, thermal_wet_is_low=True, microwave_wet_is_low=True)
     combined, agreement = two_estimator.combine(thermal_wet, micro_wet)
 
     both = np.isfinite(combined)
     r = np.corrcoef(thermal_wet[both], micro_wet[both])[0, 1] if both.sum() > 50 else float("nan")
-    print(f"land cells with both estimators: {int(both.sum()):,}; "
+    print(f"land cells with both estimators (shared support, "
+          f"min_days={min_days}): {int(both.sum()):,}; "
           f"thermal-vs-microwave wetness r = {r:+.3f}; "
           f"mean agreement = {np.nanmean(agreement):.3f}")
 
@@ -108,18 +129,25 @@ def main(argv):
          "combined_wetness": (combined, "1", "mean of the thermal and microwave wetness indices"),
          "agreement": (agreement, "1", "1 minus the absolute difference of the two indices"),
          "n_obs_thermal": (n_dt, "1", "clear days contributing to thermal_dT"),
-         "n_obs_microwave": (n_e, "1", "clear days contributing to the emissivity")},
-        {"title": "Two-estimator relative land surface wetness (thermal + microwave)",
+         "n_obs_microwave_joint_19vh": (n_e_19vh, "1",
+             "clear days where BOTH 19V AND 19H were finite (the joint "
+             "support behind the V-H polarization difference; not just 19V)")},
+        {"title": ("Two-estimator relative land surface wetness "
+                   "(thermal + microwave) over shared support"),
          "summary": ("Monthly relative wetness from two independent GridSat-B1-anchored "
                      "estimators: the clear-sky diurnal infrared range and the 19 GHz "
-                     "V-H microwave emissivity polarization difference. Relative, not "
-                     "absolute soil moisture; most meaningful over low vegetation; "
-                     "time-varying signal is cleanest as an anomaly once a climatology "
-                     "exists."),
+                     "V-H microwave emissivity polarization difference. Both estimators "
+                     "are rank-normalized over the shared support (cells where both "
+                     "are valid on land) so the percentiles reference the same population. "
+                     "A min_days gate (in attributes) drops cells with too few clear "
+                     "days. Relative, not absolute soil moisture; most meaningful over "
+                     "low vegetation; the time-varying signal is cleanest as an anomaly "
+                     "once a climatology exists."),
+         "min_days": min_days,
          "institution": "NOAA National Centers for Environmental Information",
-         "source": "CSU SSM/I FCDR (F-13) and GridSat-B1 (Knapp), F-13 1998",
+         "source": "CSU SSM/I FCDR (F-13) and GridSat-B1, F-13 1998",
          "creator_name": "Hilawe Semunegus",
-         "contributor_name": "Kenneth R. Knapp (GridSat-B1)",
+         "contributor_name": "Ken Knapp (GridSat-B1)",
          "Conventions": "CF-1.8, ACDD-1.3",
          "calibration": "85-to-91 GHz not applicable (F-13 is true 85.5 GHz)"})
     print("wrote", nc)

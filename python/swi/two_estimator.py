@@ -31,15 +31,18 @@ def rank_normalize(field, mask):
     """Percentile rank in 0..1 of field over the masked cells, NaN elsewhere.
 
     Rank-normalizing (rather than a z-score) is robust to the skewed, bounded
-    distributions of dT and the polarization difference.
+    distributions of dT and the polarization difference. Uses average ranks for
+    ties so the result is invariant to ordering inside tied values.
     """
+    from scipy.stats import rankdata
     field = np.asarray(field, dtype=np.float64)
     out = np.full(field.shape, np.nan)
     sel = np.asarray(mask, dtype=bool) & np.isfinite(field)
     vals = field[sel]
     if vals.size == 0:
         return out
-    ranks = np.argsort(np.argsort(vals)).astype(np.float64)
+    # Average-rank percentile in [0, 1]. rankdata returns 1..N, shift to 0..N-1.
+    ranks = rankdata(vals, method="average") - 1.0
     out[sel] = ranks / max(vals.size - 1, 1)
     return out
 
@@ -47,17 +50,65 @@ def rank_normalize(field, mask):
 def wetness_index(field, mask, wet_is_low=True):
     """Relative wetness in 0..1 from a field (1 = wet). wet_is_low inverts the
     rank so that the LOW end of the field maps to wet (true for both dT and the
-    polarization difference)."""
+    polarization difference). NOTE: callers driving the joint product should
+    use rank_normalize_shared so both estimators are ranked over the same
+    cells.
+    """
     r = rank_normalize(field, mask)
     return (1.0 - r) if wet_is_low else r
+
+
+def shared_support_mask(thermal_field, microwave_field, land_mask):
+    """Cells where BOTH estimators have finite data on land.
+
+    The Codex review caught a real bug: rank-normalizing each estimator over
+    its own clear-sky support and then comparing them cell by cell makes the
+    percentiles on a shared cell reference different populations, biasing both
+    `combined_wetness` and `agreement`. Ranking both estimators over the
+    shared support is the fix.
+    """
+    return (np.asarray(land_mask, dtype=bool)
+            & np.isfinite(np.asarray(thermal_field, dtype=np.float64))
+            & np.isfinite(np.asarray(microwave_field, dtype=np.float64)))
+
+
+def joint_indices(thermal_field, microwave_field, land_mask,
+                  thermal_wet_is_low=True, microwave_wet_is_low=True):
+    """Rank-normalize both estimators over a SHARED-SUPPORT mask, then return
+    (thermal_wet, microwave_wet, shared_mask).
+
+    Both percentiles reference the same cell population, so combining them or
+    differencing them is now meaningful. Both default to wet-is-low because the
+    diurnal range dT (thermal) and the 19 GHz V-H polarization difference
+    (microwave) both fall on the wet end.
+    """
+    shared = shared_support_mask(thermal_field, microwave_field, land_mask)
+    t = rank_normalize(thermal_field, shared)
+    m = rank_normalize(microwave_field, shared)
+    if thermal_wet_is_low:
+        t = np.where(shared, 1.0 - t, np.nan)
+    else:
+        t = np.where(shared, t, np.nan)
+    if microwave_wet_is_low:
+        m = np.where(shared, 1.0 - m, np.nan)
+    else:
+        m = np.where(shared, m, np.nan)
+    return t, m, shared
 
 
 def combine(thermal_wet, micro_wet):
     """Combined wetness and agreement where both indices are valid.
 
-    Returns (combined, agreement): combined is the mean of the two 0-to-1
-    indices; agreement is 1 - |difference|, so 1 means the two estimators place
-    the cell at the same point on the wet-to-dry scale and 0 means opposite ends.
+    Returns (combined, agreement). Combined is the mean of the two 0-to-1
+    indices. Agreement is 1 - |difference|, so 1 means the two estimators
+    place the cell at the same point on the wet-to-dry scale and 0 means
+    opposite ends.
+
+    PRECONDITION: thermal_wet and micro_wet must have been rank-normalized
+    over the SAME support (use joint_indices), otherwise the cell-wise
+    comparison is biased. The function does not enforce this because the
+    callers passing arbitrary fields are tested elsewhere, but the joint
+    product driver is responsible for using joint_indices.
     """
     thermal_wet = np.asarray(thermal_wet, dtype=np.float64)
     micro_wet = np.asarray(micro_wet, dtype=np.float64)
