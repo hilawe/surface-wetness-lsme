@@ -148,9 +148,16 @@ def main(argv):
         zone_stats[name] = zs
         print(f"{name}:")
         for zn, s in zs.items():
+            if s["pearson"] is None:                 # zone has <50 valid cells
+                print(f"   {zn:9s} n={s['n']:,} (no data)")
+                continue
+            # std_telsem/std_derived can be None one cell sooner than pearson
+            # (skill uses <50, the std guard uses >50), so format them defensively.
+            st = "n/a" if s["std_telsem"] is None else f"{s['std_telsem']:.3f}"
+            sd = "n/a" if s["std_derived"] is None else f"{s['std_derived']:.3f}"
             print(f"   {zn:9s} r={s['pearson']:.3f} bias={s['bias']:+.3f} "
-                  f"rmse={s['rmse']:.3f}  std(telsem)={s['std_telsem']:.3f} "
-                  f"std(derived)={s['std_derived']:.3f}  n={s['n']:,}")
+                  f"rmse={s['rmse']:.3f}  std(telsem)={st} std(derived)={sd}  "
+                  f"n={s['n']:,}")
     summary["zone_stats"] = zone_stats
 
     # H1: residual vs tcwv, global and tropics, for 85V/85H/22V
@@ -341,8 +348,11 @@ def fig_correction(eff, out):
                  fontsize=12)
     for ax, name in zip(axes, ("85V", "22V")):
         zones = ["global", "tropics", "midlat", "high-lat"]
-        ratm = [eff[name][z]["atmos"]["pearson"] for z in zones]
-        rnom = [eff[name][z]["nominal"]["pearson"] for z in zones]
+        # empty zones (tropical-only input) have None Pearson; NaN bars are skipped
+        ratm = [v if (v := eff[name][z]["atmos"]["pearson"]) is not None else np.nan
+                for z in zones]
+        rnom = [v if (v := eff[name][z]["nominal"]["pearson"]) is not None else np.nan
+                for z in zones]
         x = np.arange(len(zones)); w = 0.38
         ax.bar(x - w/2, rnom, w, label="no correction", color="#bbbbbb")
         ax.bar(x + w/2, ratm, w, label="ERA5 correction", color="#2c7fb8")
