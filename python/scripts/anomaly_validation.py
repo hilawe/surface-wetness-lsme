@@ -68,10 +68,10 @@ def opt(argv, name, default):
     return argv[argv.index(name) + 1] if name in argv else default
 
 
-def discover(emis_dir):
+def discover(emis_dir, sat="F13"):
     """Chronological (year, month, path) of the saved monthly composites."""
     out = []
-    for p in sorted(glob.glob(os.path.join(emis_dir, "LSME_emis_F13_??????.nc"))):
+    for p in sorted(glob.glob(os.path.join(emis_dir, f"LSME_emis_{sat}_??????.nc"))):
         m = re.search(r"_(\d{4})(\d{2})\.nc$", p)
         out.append((int(m.group(1)), int(m.group(2)), p))
     return out
@@ -86,6 +86,7 @@ def _parse_month_csv(s):
 
 def main(argv):
     emis_dir = opt(argv, "--emis-dir", "../scratch/lsme_monthly")
+    sat = opt(argv, "--sat", "F13").upper()
     telsem_dir = opt(argv, "--telsem", "../data/telsem2")
     out = opt(argv, "--out", "../scratch/anomaly")
     min_days = int(opt(argv, "--min-days", "1"))
@@ -95,7 +96,7 @@ def main(argv):
     report_months = _parse_month_csv(opt(argv, "--report-months", ""))
     os.makedirs(out, exist_ok=True)
 
-    months = discover(emis_dir)
+    months = discover(emis_dir, sat)
     if len(months) < 2:
         print(f"need >= 2 monthly composites in {emis_dir}; found {len(months)}")
         return 1
@@ -245,7 +246,7 @@ def main(argv):
           f"median {med:.3f} over {int(np.isfinite(rmap).sum()):,} land cells")
 
     fig_summary(rows, lat, lon, rmap, lsme_anom, telsem_anom, land, labels, out,
-                min_days, coarsen, min_signal)
+                min_days, coarsen, min_signal, sat)
     return 0
 
 
@@ -254,12 +255,13 @@ def roll180(a, lon):
 
 
 def fig_summary(rows, lat, lon, rmap, lsme_anom, telsem_anom, land, labels, out,
-                min_days=1, coarsen=1, min_signal=0.0):
+                min_days=1, coarsen=1, min_signal=0.0, sat="F13"):
     floor = "" if min_days <= 1 else f", clear-day floor >= {min_days}/cell-month"
     grid = "" if coarsen <= 1 else f", {0.25 * coarsen:g} deg grid"
     sig = "" if min_signal <= 0 else f", signal floor {min_signal:g}"
+    sat_disp = f"{sat[:1]}-{sat[1:]}"
     fig = plt.figure(figsize=(15, 9))
-    fig.suptitle("LSME emissivity anomaly vs TELSEM anomaly, F-13 1998 "
+    fig.suptitle(f"LSME emissivity anomaly vs TELSEM anomaly, {sat_disp} 1998 "
                  f"({len(labels)} months: {labels[0]}..{labels[-1]}{floor}{grid}{sig})",
                  fontsize=13)
 
@@ -303,7 +305,7 @@ def fig_summary(rows, lat, lon, rmap, lsme_anom, telsem_anom, land, labels, out,
     suffix = ("" if min_days <= 1 else f"_min{min_days}") + \
              ("" if coarsen <= 1 else f"_c{coarsen}") + \
              ("" if min_signal <= 0 else f"_s{min_signal:g}")
-    p = os.path.join(out, f"anomaly_validation{suffix}.png")
+    p = os.path.join(out, f"anomaly_validation_{sat}{suffix}.png")
     fig.savefig(p, dpi=110); plt.close(fig)
     print("wrote", p)
 

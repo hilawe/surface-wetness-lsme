@@ -33,7 +33,16 @@ from scripts.run_lsme import build_inputs
 
 F13DIR_DEFAULT = "../data/f13_1998"
 GRIDSAT_DEFAULT = "../data/gridsat_july"
-F13_FMT = "CSU_SSMI_FCDR-GRID_V02R00_F13_D{ym}{dd}.nc"
+
+
+def csu_fmt(sat):
+    """CSU FCDR-GRID filename pattern for a satellite, with {ym} and {dd} slots.
+
+    F08 to F15 are SSM/I (CSU_SSMI_...), F16 and up are SSMIS (CSU_SSMIS_...),
+    the same convention as scripts/fetch_csu.py.
+    """
+    sensor = "SSMI" if int(sat[1:]) <= 15 else "SSMIS"
+    return f"CSU_{sensor}_FCDR-GRID_V02R00_{sat}_D{{ym}}{{dd}}.nc"
 
 
 def opt(argv, name, default):
@@ -41,9 +50,9 @@ def opt(argv, name, default):
     return argv[argv.index(name) + 1] if name in argv else default
 
 
-def discover_days(f13dir, ym):
-    """All days (DD) for which an F-13 file exists in f13dir for year-month ym."""
-    paths = glob.glob(os.path.join(f13dir, F13_FMT.format(ym=ym, dd="??")))
+def discover_days(f13dir, ym, fmt):
+    """All days (DD) for which a CSU file matching fmt exists in f13dir for ym."""
+    paths = glob.glob(os.path.join(f13dir, fmt.format(ym=ym, dd="??")))
     days = sorted(re.search(r"D\d{6}(\d\d)\.nc$", p).group(1) for p in paths)
     return days
 
@@ -56,11 +65,14 @@ def main(argv):
 
     f13dir = opt(argv, "--f13-dir", F13DIR_DEFAULT)
     gridsat_root = opt(argv, "--gridsat-root", GRIDSAT_DEFAULT)
+    sat = opt(argv, "--sat", "F13").upper()
+    sat_disp = f"{sat[:1]}-{sat[1:]}"   # F13 -> F-13 for human-readable labels
+    fmt = csu_fmt(sat)
     year = int(opt(argv, "--year", "1998"))
     month = int(opt(argv, "--month", "7"))
     ym = f"{year}{month:02d}"
     days_arg = opt(argv, "--days", "all")
-    days = discover_days(f13dir, ym) if days_arg == "all" else days_arg.split(",")
+    days = discover_days(f13dir, ym, fmt) if days_arg == "all" else days_arg.split(",")
     # Optional 85 GHz scattering screen. --scatter-screen with no value uses the
     # calibrated default; --scatter-screen K uses threshold K (Kelvin).
     scatter_k = None
@@ -73,6 +85,7 @@ def main(argv):
             scatter_k = lsme.SI37_DEFAULT_K
 
     print(f"f13-dir      : {f13dir}")
+    print(f"satellite    : {sat}")
     print(f"gridsat-root : {gridsat_root}")
     print(f"period       : {year}-{month:02d}")
     print(f"pass         : {pass_}")
@@ -84,9 +97,9 @@ def main(argv):
     sum_e = cnt = lat = lon = None
     used, skipped = [], []
     for dd in days:
-        f13 = os.path.join(f13dir, F13_FMT.format(ym=ym, dd=dd))
+        f13 = os.path.join(f13dir, fmt.format(ym=ym, dd=dd))
         if not os.path.exists(f13):
-            skipped.append((dd, "no F-13 file"))
+            skipped.append((dd, f"no {sat_disp} file"))
             continue
         lat, lon, tb, _ = io_csu_grid.read_channels(f13, pass_=pass_)
         ts, _, t_atm, _, tcwv, _, clear, clear_label = build_inputs(
@@ -125,11 +138,12 @@ def main(argv):
     if save:
         from swi import io_lsme_monthly
         os.makedirs(save, exist_ok=True)
-        outp = os.path.join(save, f"LSME_emis_F13_{ym}.nc")
+        outp = os.path.join(save, f"LSME_emis_{sat}_{ym}.nc")
         io_lsme_monthly.write_monthly_emis(
             outp, lat, lon, monthly, cnt,
-            attrs={"title": f"Monthly-mean LSME emissivity, F-13 {ym}",
-                   "source": "CSU SSM/I FCDR (F-13) and GridSat-B1 (Knapp)",
+            attrs={"title": f"Monthly-mean LSME emissivity, {sat_disp} {ym}",
+                   "source": f"CSU {'SSM/I' if int(sat[1:]) <= 15 else 'SSMIS'} "
+                             f"FCDR ({sat_disp}) and GridSat-B1 (Knapp)",
                    "institution": "NOAA National Centers for Environmental Information",
                    "creator_name": "Hilawe Semunegus",
                    "days_used": " ".join(used)})
