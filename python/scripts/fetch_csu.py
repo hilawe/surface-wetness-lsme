@@ -21,6 +21,30 @@ BASE = ("https://www.ncei.noaa.gov/data/ssmis-brightness-temperature-csu/access/
         "FCDR-GRID")
 
 
+def prefer_ipv4_dns():
+    """Sort IPv4 ahead of IPv6 for every connection in this process.
+
+    The NCEI host resolves to both IPv4 and IPv6, and on hosts whose IPv6 route to
+    NCEI is dead, urllib (which has no Happy Eyeballs and tries addresses in resolver
+    order) stalls on the IPv6 attempt until the socket timeout, three times per file,
+    so a fetch makes no progress. curl works on the same host because it races the
+    families. Sorting IPv4 first makes urllib try the working route first and fall
+    back to IPv6 only if IPv4 fails. Installed from main() rather than at import so
+    importing this module's helpers does not change DNS ordering as a side effect.
+    Idempotent, so a repeated call does not wrap the wrapper.
+    """
+    if getattr(socket.getaddrinfo, "_ipv4_first", False):
+        return
+    orig = socket.getaddrinfo
+
+    def ipv4_first(*args, **kwargs):
+        return sorted(orig(*args, **kwargs),
+                      key=lambda ai: 0 if ai[0] == socket.AF_INET else 1)
+
+    ipv4_first._ipv4_first = True
+    socket.getaddrinfo = ipv4_first
+
+
 def sensor_for(sat):
     return "SSMI" if int(sat[1:]) <= 15 else "SSMIS"
 
@@ -67,6 +91,7 @@ def main():
         out = f"../data/{sat.lower()}_{year}" + (f"{month:02d}" if month else "")
     os.makedirs(out, exist_ok=True)
     socket.setdefaulttimeout(45)
+    prefer_ipv4_dns()
 
     months = [month] if month else range(1, 13)
     got = cached = miss = total = 0
