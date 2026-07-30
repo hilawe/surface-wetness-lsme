@@ -208,3 +208,86 @@ def temporal_anomaly_correlation(stack_a, stack_b, min_n=8):
         r = cov / np.sqrt(va * vb)
     r[(n < min_n) | (va == 0) | (vb == 0)] = np.nan
     return r, n
+
+
+def weighted_pearson(a, b, w):
+    """Pearson correlation of a and b with per-sample weights w."""
+    a = np.asarray(a, np.float64); b = np.asarray(b, np.float64)
+    w = np.asarray(w, np.float64)
+    sw = w.sum()
+    if sw <= 0 or a.size < 3:
+        return np.nan
+    ma = (w * a).sum() / sw
+    mb = (w * b).sum() / sw
+    da, db = a - ma, b - mb
+    va = (w * da * da).sum()
+    vb = (w * db * db).sum()
+    if va <= 0 or vb <= 0:
+        return np.nan
+    return float((w * da * db).sum() / np.sqrt(va * vb))
+
+
+def weighted_spearman(a, b, w):
+    """Rank correlation with per-sample weights, as weighted Pearson on ranks.
+
+    On an equal-angle grid, cells at high latitude cover far less area than
+    tropical ones. An unweighted global correlation therefore over-represents
+    high latitudes. Weighting by the cosine of latitude makes the statistic
+    represent area rather than cell count.
+
+    The estimand is specific and worth naming: ranks are ordinary cell-count
+    midranks, and the weights are applied to the correlation of those ranks.
+    Building the ranks from the area-weighted empirical distribution instead is
+    an equally defensible definition and gives slightly lower values. Neither is
+    "the" weighted Spearman, so a comparison between two fields should use one
+    definition throughout, as it does here.
+    """
+    return weighted_pearson(_rank(a), _rank(b), w)
+
+
+def weighted_detection_contrast(index, ref, w, thr=0.0):
+    """Area-weighted ratio of mean ref where the index fires to where it does not."""
+    index = np.asarray(index, np.float64); ref = np.asarray(ref, np.float64)
+    w = np.asarray(w, np.float64)
+    hi, lo = index > thr, index <= thr
+    swh, swl = w[hi].sum(), w[lo].sum()
+    if swh <= 0 or swl <= 0:
+        return {"mean_hi": np.nan, "mean_lo": np.nan, "ratio": np.nan,
+                "n_hi": int(hi.sum())}
+    mh = float((w[hi] * ref[hi]).sum() / swh)
+    ml = float((w[lo] * ref[lo]).sum() / swl)
+    return {"mean_hi": mh, "mean_lo": ml,
+            "ratio": float(mh / ml) if ml != 0 else np.nan,
+            "n_hi": int(hi.sum())}
+
+
+def block_ids(lat, lon, deg=10.0):
+    """Integer block label per sample for a spatial block bootstrap."""
+    lat = np.asarray(lat, np.float64); lon = np.asarray(lon, np.float64)
+    return (np.floor(lon / deg).astype(np.int64) * 100000
+            + np.floor(lat / deg).astype(np.int64))
+
+
+def block_bootstrap_ci(stat_fn, blocks, n_draws=2000, seed=0, alpha=0.05):
+    """Percentile confidence interval for a statistic under block resampling.
+
+    stat_fn takes an index array of sample positions and returns a scalar.
+    Neighbouring grid cells are spatially correlated, so resampling individual
+    cells understates the interval. Whole blocks are resampled instead.
+    """
+    blocks = np.asarray(blocks)
+    uniq = np.unique(blocks)
+    members = {b: np.flatnonzero(blocks == b) for b in uniq}
+    rng = np.random.RandomState(seed)
+    vals = np.empty(n_draws, dtype=np.float64)
+    for i in range(n_draws):
+        pick = uniq[rng.randint(0, uniq.size, uniq.size)]
+        idx = np.concatenate([members[p] for p in pick])
+        vals[i] = stat_fn(idx)
+    good = vals[np.isfinite(vals)]
+    if good.size == 0:
+        return {"lo": np.nan, "hi": np.nan, "n_blocks": int(uniq.size),
+                "n_draws": int(n_draws), "frac_gt_0": np.nan}
+    lo, hi = np.percentile(good, [100 * alpha / 2, 100 * (1 - alpha / 2)])
+    return {"lo": float(lo), "hi": float(hi), "n_blocks": int(uniq.size),
+            "n_draws": int(n_draws), "frac_gt_0": float((good > 0).mean())}

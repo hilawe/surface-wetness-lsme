@@ -52,27 +52,34 @@ def _day_indices(datetimes, day):
                      if (t.year, t.month, t.day) == (y, m, d)], dtype=int)
 
 
-def _morning_field(day_stack, hours, lon):
-    """Per-longitude pick of the synoptic time nearest local OVERPASS_LST_HOURS.
+def _overpass_field(day_stack, hours, lon, lst_hour=None):
+    """Per-longitude pick of the synoptic time nearest a local solar hour.
+
+    lst_hour is the target local solar time, defaulting to OVERPASS_LST_HOURS
+    (the morning descending pass). An evening ascending pass must pass its own
+    anchor, otherwise an ~18h overpass is given ~06h atmosphere.
 
     day_stack : (ntime, nlat, nlon); hours : (ntime,) UTC hours; lon : (nlon,).
     Returns (nlat, nlon).
     """
     hours = np.asarray(hours, dtype=np.float64)
     lon = np.asarray(lon, dtype=np.float64)
+    target = OVERPASS_LST_HOURS if lst_hour is None else float(lst_hour)
     lst = (hours[:, None] + lon[None, :] / 15.0) % 24.0      # (ntime, nlon)
-    dist = np.abs(lst - OVERPASS_LST_HOURS)
+    dist = np.abs(lst - target)
     dist = np.minimum(dist, 24.0 - dist)                     # circular
     best = np.argmin(dist, axis=0)                           # (nlon,)
     lon_idx = np.arange(lon.size)
     return day_stack[best, :, lon_idx].T                     # (nlat, nlon)
 
 
-def reduce_field(stack, datetimes, lon, day=None, mode="morning"):
+def reduce_field(stack, datetimes, lon, day=None, mode="morning", lst_hour=None):
     """Reduce a (ntime, nlat, nlon) stack to one (nlat, nlon) field.
 
-    mode 'morning' = per-longitude nearest-to-local-06h; 'daymean' = mean over
-    the selected day's (or all) times.
+    mode 'morning' = per-longitude nearest-to-local-06h; 'overpass' = the same
+    per-longitude pick against an explicit lst_hour, which is what an ascending
+    (evening) pass needs; 'daymean' = mean over the selected day's (or all)
+    times.
     """
     idx = _day_indices(datetimes, day)
     if idx.size == 0:
@@ -80,18 +87,21 @@ def reduce_field(stack, datetimes, lon, day=None, mode="morning"):
     sub = np.asarray(stack)[idx]
     if mode == "daymean":
         return np.asarray(sub.mean(axis=0), dtype=np.float64)
-    if mode == "morning":
+    if mode in ("morning", "overpass"):
         hours = np.array([datetimes[i].hour for i in idx], dtype=np.float64)
-        return _morning_field(sub, hours, lon)
+        return _overpass_field(sub, hours, lon, lst_hour=lst_hour)
     raise ValueError(f"unknown mode {mode!r}")
 
 
-def field_on_grid(path, var, dst_lat, dst_lon, day=None, mode="morning"):
+def field_on_grid(path, var, dst_lat, dst_lon, day=None, mode="morning",
+                  lst_hour=None):
     """One ERA5 variable, overpass-reduced and regridded onto (dst_lat, dst_lon).
 
     var is the netCDF variable name: 'tcwv' (mm), 't2m' (K), or 'skt' (K). day is
     a (year, month, day) tuple selecting the overpass date; None uses the whole
-    file. Returns a (dst_lat, dst_lon) float64 array.
+    file. lst_hour sets the local-solar-time anchor for the overpass pick, which
+    an ascending (evening) pass must supply. Returns a (dst_lat, dst_lon) float64
+    array.
     """
     import netCDF4 as nc
 
@@ -116,12 +126,14 @@ def field_on_grid(path, var, dst_lat, dst_lon, day=None, mode="morning"):
     order = np.argsort(lon360)
     lon = lon360[order]
     data = data[..., order]
-    field = reduce_field(data, datetimes, lon, day=day, mode=mode)
+    field = reduce_field(data, datetimes, lon, day=day, mode=mode,
+                         lst_hour=lst_hour)
     return validate.regrid_nearest(lat, lon, field,
                                    np.asarray(dst_lat, dtype=np.float64),
                                    np.asarray(dst_lon, dtype=np.float64))
 
 
-def tcwv_on_grid(path, dst_lat, dst_lon, day=None, mode="morning"):
+def tcwv_on_grid(path, dst_lat, dst_lon, day=None, mode="morning", lst_hour=None):
     """Total column water vapour (mm) on (dst_lat, dst_lon). See field_on_grid."""
-    return field_on_grid(path, "tcwv", dst_lat, dst_lon, day=day, mode=mode)
+    return field_on_grid(path, "tcwv", dst_lat, dst_lon, day=day, mode=mode,
+                         lst_hour=lst_hour)

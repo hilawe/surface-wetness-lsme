@@ -41,11 +41,30 @@ def test_morning_field_picks_local_06h_per_longitude():
     # at a longitude equals the chosen time index there
     stack = np.stack([np.full((1, 2), t) for t in range(4)], axis=0)[:, 0, :]
     stack = stack.reshape(4, 1, 2)
-    out = io._morning_field(stack, hours, lon)
+    out = io._overpass_field(stack, hours, lon)
     # lon 0: local 06h is UTC 06 -> index 1; lon 180: local 06h is UTC 18 -> index 3
     assert out.shape == (1, 2)
     assert out[0, 0] == 1
     assert out[0, 1] == 3
+
+
+def test_overpass_field_evening_anchor_picks_local_18h():
+    """An ascending pass must get evening atmosphere, not the morning default.
+
+    Regression guard: era5_field was pinned to the morning anchor, so an ~18h
+    ascending run was handed ~06h vapour and near-surface temperature.
+    """
+    hours = [0.0, 6.0, 12.0, 18.0]
+    lon = np.array([0.0, 180.0])
+    stack = np.stack([np.full((1, 2), t) for t in range(4)], axis=0)[:, 0, :]
+    stack = stack.reshape(4, 1, 2)
+    out = io._overpass_field(stack, hours, lon, lst_hour=18.0)
+    # lon 0: local 18h is UTC 18 -> index 3; lon 180: local 18h is UTC 06 -> index 1
+    assert out[0, 0] == 3
+    assert out[0, 1] == 1
+    # and the evening pick must differ from the morning default
+    morning = io._overpass_field(stack, hours, lon)
+    assert not np.array_equal(out, morning)
 
 
 def test_reduce_field_daymean():
@@ -81,3 +100,32 @@ def test_field_on_grid_temperatures_physical():
         assert fin.size > 0
         # Kelvin, physical Earth surface (Antarctic July plateau ~198 K to hot desert)
         assert 180.0 < fin.min() and fin.max() < 340.0
+
+
+def test_build_inputs_threads_overpass_anchor_to_every_era5_field(monkeypatch):
+    """All three ERA5 fields must use the pass-aware anchor, not just two.
+
+    Regression guard: tcwv and t2m were threaded first and skt was missed, so an
+    ascending run still received a morning skin temperature.
+    """
+    from swi import lsme_inputs
+
+    seen = {}
+
+    def fake_era5_field(csu_path, var, lat, lon, lst_hour=None):
+        seen[var] = lst_hour
+        return np.zeros((lat.size, lon.size))
+
+    monkeypatch.setattr(lsme_inputs, "era5_field", fake_era5_field)
+    lat = np.array([0.0, 1.0]); lon = np.array([0.0, 1.0])
+    # F-13 is a morning-chain satellite: descending 06h, ascending 18h.
+    lsme_inputs.build_inputs("CSU_SSMI_FCDR-GRID_V02R00_F13_D19980715.nc", lat, lon,
+                             pass_="asc", ts_source="era5")
+    assert seen["tcwv"] == 18.0
+    assert seen["t2m"] == 18.0
+    assert seen["skt"] == 18.0, "skin temperature must use the same overpass anchor"
+
+    seen.clear()
+    lsme_inputs.build_inputs("CSU_SSMI_FCDR-GRID_V02R00_F13_D19980715.nc", lat, lon,
+                             pass_="dsc", ts_source="era5")
+    assert set(seen.values()) == {6.0}

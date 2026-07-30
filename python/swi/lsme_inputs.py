@@ -70,10 +70,13 @@ def placeholder_skin_temperature(lat, lon):
     return np.repeat(ts_1d[:, np.newaxis], lon.size, axis=1)
 
 
-def era5_field(csu_path, var, lat, lon):
+def era5_field(csu_path, var, lat, lon, lst_hour=None):
     """Load one ERA5 field for the CSU file's date on the (lat, lon) grid, or None.
 
     Looks for ../era5_atmos/era5_atmos_<YYYYMM>.nc next to the data tree.
+    lst_hour is the local-solar-time anchor used to pick the synoptic time per
+    longitude. It must match the microwave overpass, so an ascending (evening)
+    pass supplies its own anchor rather than defaulting to the morning one.
     """
     ymd = io_era5_atmos.date_from_csu_name(csu_path)
     if ymd is None:
@@ -82,7 +85,8 @@ def era5_field(csu_path, var, lat, lon):
                         f"era5_atmos_{ymd[0]}{ymd[1]:02d}.nc")
     if not os.path.exists(era5):
         return None
-    return io_era5_atmos.field_on_grid(era5, var, lat, lon, day=ymd, mode="morning")
+    return io_era5_atmos.field_on_grid(era5, var, lat, lon, day=ymd,
+                                       mode="overpass", lst_hour=lst_hour)
 
 
 def gridsat_ts(gridsat_arg, lat, lon, *, csu_path=None, pass_="dsc", sat_id=None):
@@ -146,8 +150,15 @@ def build_inputs(csu_path, lat, lon, *,
     """
     sat_id = sat_id_from_csu_path(csu_path)
     nominal = atmos_mode == "nominal"
-    tcwv = None if nominal else era5_field(csu_path, "tcwv", lat, lon)
-    t_atm = None if nominal else era5_field(csu_path, "t2m", lat, lon)
+    # The ERA5 atmosphere must be sampled at the same overpass local time the
+    # GridSat skin temperature already uses. Before this was threaded through,
+    # era5_field was pinned to the morning anchor, so an ascending (~18h) run
+    # was given ~06h vapour and near-surface temperature.
+    lst_hour = overpass_lst(pass_, sat_id)
+    tcwv = None if nominal else era5_field(csu_path, "tcwv", lat, lon,
+                                           lst_hour=lst_hour)
+    t_atm = None if nominal else era5_field(csu_path, "t2m", lat, lon,
+                                            lst_hour=lst_hour)
 
     gridsat_clear = None
     ts = placeholder_skin_temperature(lat, lon)
@@ -163,7 +174,7 @@ def build_inputs(csu_path, lat, lon, *,
         else:
             ts_label = "PLACEHOLDER (GridSat file not found)"
     elif ts_source == "era5":
-        skt = era5_field(csu_path, "skt", lat, lon)
+        skt = era5_field(csu_path, "skt", lat, lon, lst_hour=lst_hour)
         if skt is not None:
             ts = skt
             ts_label = ("ERA5 skin temperature (realistic DEV stand-in; "

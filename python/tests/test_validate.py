@@ -179,3 +179,42 @@ def test_regrid_nearest_wraps_past_source_max():
     out2 = val.regrid_nearest(src_lat, src_lon, field,
                               np.array([0.0]), np.array([359.5]))
     assert out2[0, 0] == 10.0         # 359.5 is 1.5 deg from 1, 89.5 deg from 270
+
+
+def test_weighted_pearson_matches_unweighted_when_equal_weights():
+    rng = np.random.RandomState(0)
+    a = rng.normal(size=200); b = 0.7 * a + rng.normal(size=200)
+    w = np.ones(200)
+    assert abs(val.weighted_pearson(a, b, w) - np.corrcoef(a, b)[0, 1]) < 1e-12
+
+
+def test_weighted_spearman_downweights_a_region():
+    """Cosine weighting must be able to change the answer, else it is a no-op."""
+    # first half agrees, second half disagrees; weighting away the second half
+    # must raise the correlation.
+    a = np.concatenate([np.arange(50.0), np.arange(50.0)])
+    b = np.concatenate([np.arange(50.0), np.arange(50.0)[::-1]])
+    w_even = np.ones(100)
+    w_first = np.concatenate([np.ones(50), np.full(50, 0.01)])
+    assert val.weighted_spearman(a, b, w_first) > val.weighted_spearman(a, b, w_even)
+
+
+def test_block_bootstrap_ci_brackets_the_point_estimate():
+    rng = np.random.RandomState(1)
+    n = 400
+    a = rng.normal(size=n); b = 0.6 * a + rng.normal(size=n)
+    blocks = np.repeat(np.arange(20), 20)          # 20 blocks of 20
+    point = np.corrcoef(a, b)[0, 1]
+    ci = val.block_bootstrap_ci(
+        lambda idx: np.corrcoef(a[idx], b[idx])[0, 1],
+        blocks, n_draws=200, seed=3)
+    assert ci["n_blocks"] == 20
+    assert ci["lo"] < point < ci["hi"]
+    assert ci["frac_gt_0"] == 1.0
+
+
+def test_block_ids_separate_distant_points():
+    lat = np.array([5.0, 5.0, 45.0]); lon = np.array([10.0, 12.0, 200.0])
+    ids = val.block_ids(lat, lon, deg=10.0)
+    assert ids[0] == ids[1]      # same 10-degree block
+    assert ids[2] != ids[0]
