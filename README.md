@@ -85,7 +85,7 @@ inter-satellite drift handling that a multi-satellite anomaly requires.
 - **Minimal shared core** (`python/swi/channels.py`,
   `python/swi/io_csu_grid.py`, `python/swi/validate.py`): the SSM/I channel
   conventions, the CSU FCDR-GRID reader, and the skill metrics, copied from
-  the sibling Basist revival repository for self-containment.
+  the sibling Basist reconstruction repository for self-containment.
 
 ## Running the tests
 

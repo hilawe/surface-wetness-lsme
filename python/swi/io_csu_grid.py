@@ -25,6 +25,10 @@ from . import core_numpy
 # Base channel names (without the fcdr_ prefix or _asc/_dsc suffix), in Basist
 # order P1..P7 = 19V 19H 22V 37V 37H 85V 85H.
 SENSOR_CHANNELS = {
+    # Antenna temperatures gridded from the TDR BASE swaths by
+    # scripts/grid_tdr_day.py. These carry no fcdr_ prefix, and they are
+    # ANTENNA temperatures; see swi/io_tdr_swath.py.
+    "ssmi_ta": ["ta19v", "ta19h", "ta22v", "ta37v", "ta37h", "ta85v", "ta85h"],
     "ssmi":  ["tb19v", "tb19h", "tb22v", "tb37v", "tb37h", "tb85v", "tb85h"],
     "ssmis": ["tb19v", "tb19h", "tb22v", "tb37v", "tb37h", "tb91v", "tb91h"],
     "amsr2": ["tb18v", "tb18h", "tb23v", "tb36v", "tb36h", "tb89va", "tb89ha"],
@@ -33,10 +37,22 @@ SENSOR_CHANNELS = {
 FILL = -9999.9
 
 
+def var_prefix(ds, bases):
+    """Return the variable-name prefix this file uses, or None if absent.
+
+    The CSU files prefix every channel with `fcdr_`. The antenna-temperature
+    grids written by this project do not.
+    """
+    for prefix in ("fcdr_", ""):
+        if all(f"{prefix}{b}_asc" in ds.variables for b in bases):
+            return prefix
+    return None
+
+
 def detect_sensor(ds):
     """Pick the sensor whose channel set is present in the dataset."""
     for sensor, bases in SENSOR_CHANNELS.items():
-        if all(f"fcdr_{b}_asc" in ds.variables for b in bases):
+        if var_prefix(ds, bases) is not None:
             return sensor
     raise ValueError("no known sensor channel set found in file")
 
@@ -55,12 +71,15 @@ def read_channels(path, pass_="asc", sensor=None):
     try:
         sensor = sensor or detect_sensor(ds)
         bases = SENSOR_CHANNELS[sensor]
+        prefix = var_prefix(ds, bases)
+        if prefix is None:
+            raise ValueError(f"{path}: channels for sensor {sensor} not found")
         lat = np.asarray(ds["lat"][:], dtype=np.float64)
         lon = np.asarray(ds["lon"][:], dtype=np.float64)
         nlat, nlon = lat.size, lon.size
         tb = np.empty((nlat, nlon, N_CHANNELS), dtype=np.float32)
         for i, base in enumerate(bases):
-            v = ds[f"fcdr_{base}_{pass_}"][:]
+            v = ds[f"{prefix}{base}_{pass_}"][:]
             a = np.ma.filled(v, np.nan).astype(np.float32)
             a[a <= FILL + 1.0] = np.nan          # guard against fill leakage
             tb[:, :, i] = a

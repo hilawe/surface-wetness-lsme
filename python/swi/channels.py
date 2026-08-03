@@ -21,7 +21,7 @@ NV = 70
 FILL_BYTE = 32
 
 # Output sentinels (see docs/the project documentation).
-RTEMP_BAD = -99.0     # undefined / unusable land skin temperature
+RTEMP_BAD = -99.0     # undefined / unusable retrieval temperature
 WET_BAD = -99.0       # condition prevents a wetness retrieval
 WET_DRY = 0.0
 SNOW_NONE = 0

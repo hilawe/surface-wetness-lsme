@@ -245,6 +245,37 @@ def weighted_spearman(a, b, w):
     return weighted_pearson(_rank(a), _rank(b), w)
 
 
+def weighted_rank(x, w):
+    """Midranks built from the weighted empirical distribution.
+
+    Each sample's rank is the cumulative weight of all smaller values plus half
+    its own group's weight, with ties sharing one rank. This is the alternative
+    weighted-rank definition discussed in weighted_spearman's docstring.
+    """
+    x = np.asarray(x, np.float64); w = np.asarray(w, np.float64)
+    order = np.argsort(x, kind="mergesort")
+    xs, ws = x[order], w[order]
+    change = np.r_[True, xs[1:] != xs[:-1]]
+    gid = np.cumsum(change) - 1
+    gw = np.bincount(gid, weights=ws)              # total weight per tied group
+    below = np.concatenate([[0.0], np.cumsum(gw)[:-1]])
+    r = (below + gw / 2.0)[gid]                    # weight below + half own group
+    out = np.empty_like(r)
+    out[order] = r
+    return out
+
+
+def weighted_spearman_rankdist(a, b, w):
+    """Weighted Spearman with ranks built from the weighted distribution.
+
+    The default weighted_spearman ranks by cell count and weights the
+    correlation of those ranks. This variant builds the ranks themselves from
+    the area-weighted empirical distribution, the other defensible definition.
+    Reporting both shows how much the choice of definition carries.
+    """
+    return weighted_pearson(weighted_rank(a, w), weighted_rank(b, w), w)
+
+
 def weighted_detection_contrast(index, ref, w, thr=0.0):
     """Area-weighted ratio of mean ref where the index fires to where it does not."""
     index = np.asarray(index, np.float64); ref = np.asarray(ref, np.float64)
@@ -268,12 +299,18 @@ def block_ids(lat, lon, deg=10.0):
             + np.floor(lat / deg).astype(np.int64))
 
 
-def block_bootstrap_ci(stat_fn, blocks, n_draws=2000, seed=0, alpha=0.05):
+def block_bootstrap_ci(stat_fn, blocks, n_draws=2000, seed=0, alpha=0.05,
+                       return_draws=False, null_value=0.0):
     """Percentile confidence interval for a statistic under block resampling.
 
     stat_fn takes an index array of sample positions and returns a scalar.
     Neighbouring grid cells are spatially correlated, so resampling individual
     cells understates the interval. Whole blocks are resampled instead.
+
+    null_value sets the reference the draw fraction is reported against, which
+    is 0 for a correlation or a difference and 1 for a ratio such as a detection
+    contrast. The reported key is named for it, so a contrast bootstrap cannot
+    be read as if zero were its null.
     """
     blocks = np.asarray(blocks)
     uniq = np.unique(blocks)
@@ -286,8 +323,15 @@ def block_bootstrap_ci(stat_fn, blocks, n_draws=2000, seed=0, alpha=0.05):
         vals[i] = stat_fn(idx)
     good = vals[np.isfinite(vals)]
     if good.size == 0:
-        return {"lo": np.nan, "hi": np.nan, "n_blocks": int(uniq.size),
-                "n_draws": int(n_draws), "frac_gt_0": np.nan}
+        out = {"lo": np.nan, "hi": np.nan, "n_blocks": int(uniq.size),
+               "n_draws": int(n_draws), f"frac_gt_{null_value:g}": np.nan}
+        if return_draws:
+            out["draws"] = []
+        return out
     lo, hi = np.percentile(good, [100 * alpha / 2, 100 * (1 - alpha / 2)])
-    return {"lo": float(lo), "hi": float(hi), "n_blocks": int(uniq.size),
-            "n_draws": int(n_draws), "frac_gt_0": float((good > 0).mean())}
+    out = {"lo": float(lo), "hi": float(hi), "n_blocks": int(uniq.size),
+           "n_draws": int(n_draws),
+           f"frac_gt_{null_value:g}": float((good > null_value).mean())}
+    if return_draws:
+        out["draws"] = [float(v) for v in vals]
+    return out

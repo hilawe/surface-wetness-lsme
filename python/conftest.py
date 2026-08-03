@@ -2,7 +2,7 @@
 
 The LSME work does not use the Surface Wetness Index decision-tree engine, so
 no C library is built here. The companion `surface-wetness-index` repository
-hosts the Basist revival and its C oracle.
+hosts the Basist reconstruction and its C oracle.
 """
 
 import os
