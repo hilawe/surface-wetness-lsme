@@ -73,8 +73,13 @@ def main(argv):
     ym = f"{year}{month:02d}"
     days_arg = opt(argv, "--days", "all")
     days = discover_days(f13dir, ym, fmt) if days_arg == "all" else days_arg.split(",")
-    # Optional 85 GHz scattering screen. --scatter-screen with no value uses the
-    # calibrated default; --scatter-screen K uses threshold K (Kelvin).
+    # Optional 85 GHz scattering screen, EXPERIMENTAL. The threshold must be
+    # given explicitly. An earlier version silently applied the superseded
+    # July-tuned 8 K when the value was omitted, while the held-out work had
+    # moved to per-combination choices and the evaluation programme had
+    # concluded the flagged tail's physical identity (cloud or wet ground) is
+    # unresolved, so a bare flag applied an old threshold under durable
+    # documentation that oversold it (round-three review).
     scatter_k = None
     if "--scatter-screen" in argv:
         i = argv.index("--scatter-screen")
@@ -82,7 +87,12 @@ def main(argv):
         try:
             scatter_k = float(nxt)
         except (TypeError, ValueError):
-            scatter_k = lsme.SI37_DEFAULT_K
+            raise SystemExit(
+                "REFUSED: --scatter-screen needs an explicit threshold in "
+                "Kelvin (for example --scatter-screen 4). The screen is "
+                "experimental, what it removes is physically unidentified "
+                "and may be wet-surface signal, and no default threshold is "
+                "endorsed. See the project documentation.")
 
     print(f"f13-dir      : {f13dir}")
     print(f"satellite    : {sat}")

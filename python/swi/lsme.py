@@ -106,15 +106,17 @@ def apparent_emissivity(tb, ts):
         return tb / ts
 
 
-# Default 85 GHz scattering-screen threshold (Kelvin). A pixel is flagged as
-# scattering-contaminated when the 37V-minus-85V depression exceeds this, because
-# ice scattering near deep convection drives 85V well below the less-affected
-# 37V. The default 8.0 K was originally chosen by inspection on F-13 July 1998
-# against TELSEM agreement, which the 2026-06-26 adversarial review correctly
-# flagged as circular (tuned on TELSEM, then evaluated against TELSEM). Use
-# tune_si37_threshold() with a held-out tuning subset to choose this honestly,
-# and report screen-off as the headline number with screen-on as sensitivity.
-# See docs/Scattering_Screen_85GHz.md.
+# Historical 85 GHz scattering-screen threshold (Kelvin). THE SCREEN IS
+# EXPERIMENTAL and this value is superseded: the 2026-08 evaluation programme
+# found no material advantage for SI37 over a simpler 85V-only rule, could not
+# identify what the flagged low-85V tail physically is (cloud or wet ground,
+# unresolved in either direction), and chose per-combination thresholds by a
+# held-out procedure where an operating point was wanted (4 K for F-13
+# descending 1998, not this 8 K, which was the original July-tuned choice).
+# Because the candidate for the flagged tail includes wet surfaces, an
+# 85V-based screen may remove the very signal this product measures. Do not
+# enable it in production without reading
+# the project documentation and its sibling memos.
 SI37_DEFAULT_K = 8.0
 
 
@@ -131,12 +133,15 @@ def scattering_index_si37(tb):
 
 
 def scattering_keep_mask(tb, threshold_k=SI37_DEFAULT_K):
-    """Boolean keep-mask, True where the pixel is NOT flagged as scattering.
+    """Boolean keep-mask, True where the pixel is NOT flagged by SI37.
 
-    Keeps a pixel when the 37V-minus-85V depression is below threshold_k. Pixels
-    where the index cannot be computed (missing 37V or 85V) are kept here and
-    masked later by the emissivity validity check, so this screen only ever
-    removes genuine high-scattering pixels.
+    Keeps a pixel when the 37V-minus-85V depression is below threshold_k.
+    Pixels where the index cannot be computed (missing 37V or 85V) are kept
+    here and masked later by the emissivity validity check. WHAT THE FLAG
+    MARKS IS NOT ESTABLISHED: the 2026-08 evaluation could not determine
+    whether the flagged low-85V tail is scattering cloud or a wet-surface
+    emissivity signature, and the latter is this product's own signal, so
+    treat removal as experimental (see the SI37_DEFAULT_K note above).
     """
     si37 = scattering_index_si37(tb)
     return ~(si37 >= threshold_k)
@@ -223,10 +228,13 @@ def derive_emissivity(tb, ts, clear=None, tcwv_mm=None, t_atm=None, lapse=10.0,
     lapse : effective skin-to-atmosphere temperature offset (K), used when t_atm
          is None.
     scatter_screen_k : float or None. When set, also drop pixels whose
-         37V-minus-85V scattering depression exceeds this threshold (Kelvin),
-         on top of the clear-sky mask, to remove ice scattering near deep
-         convection that the cloud mask misses. None (default) leaves the
-         retrieval unchanged. SI37_DEFAULT_K is the calibrated operating point.
+         37V-minus-85V depression exceeds this threshold (Kelvin), on top of
+         the clear-sky mask. EXPERIMENTAL: what the flagged tail physically
+         is remains unidentified (cloud or wet ground), and the 2026-08
+         evaluation found no material advantage over a simpler 85V-only
+         rule, so None (the default, screen off) is the supported
+         configuration. SI37_DEFAULT_K is the superseded historical value,
+         not a calibrated operating point.
 
     Returns
     -------
