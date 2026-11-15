@@ -119,3 +119,49 @@ def test_load_atlas_missing_file_raises_with_guidance():
         telsem.load_atlas("/no/such/telsem2/dir", 7, lat=lat, lon=lon)
     with pytest.raises(ValueError):
         telsem.load_atlas("/whatever", 7)          # no grid given
+
+
+def test_the_telsem_entry_point_returns_the_shared_land_mask():
+    """telsem.land_mask is a re-export and must stay identical to its source.
+
+    The LSME drivers call it by this name throughout, so it has to keep
+    working and keep agreeing with swi.landmask. A silent divergence would
+    surface as a changed land and sea population in a validation statistic
+    rather than as an error.
+    """
+    from swi import landmask
+
+    lat = np.array([-10.0, 0.0, 10.0, 40.0])
+    lon = np.array([0.0, 90.0, 190.0, 350.0])
+    assert np.array_equal(telsem.land_mask(lat, lon),
+                          landmask.land_mask(lat, lon))
+
+
+def test_the_land_mask_is_reached_without_the_grid_engine(monkeypatch):
+    """swi.telsem must not reach the land mask through swi.grids.
+
+    The LSME export ships this module and not the grid engine. For three
+    months it routed this call through swi.grids, and the exported tree could
+    not import it, so the public LSME face failed for anyone who cloned it
+    while every test in the source repository passed. swi.grids is always
+    importable here, so the export's condition has to be made deliberately.
+    """
+    import sys
+
+    class RefuseGrids:
+        def find_spec(self, name, path=None, target=None):
+            if name == "swi.grids":
+                raise ModuleNotFoundError("No module named 'swi.grids'")
+            return None
+
+    # The finder is consulted only for a module that is not already imported.
+    monkeypatch.delitem(sys.modules, "swi.grids", raising=False)
+    monkeypatch.setattr(sys, "meta_path", [RefuseGrids()] + sys.meta_path)
+
+    with pytest.raises(ModuleNotFoundError):
+        __import__("swi.grids")
+
+    lat = np.array([-10.0, 0.0, 10.0, 40.0])
+    lon = np.array([0.0, 90.0, 190.0, 350.0])
+    out = telsem.land_mask(lat, lon)
+    assert out.shape == (lat.size, lon.size)

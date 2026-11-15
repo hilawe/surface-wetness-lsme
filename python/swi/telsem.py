@@ -38,8 +38,13 @@ BASIST_TO_TELSEM = [
 
 
 def land_mask(lat, lon):
-    """Boolean land mask. Moved to `swi.grids`; re-exported here for callers."""
-    from .grids import land_mask as _lm
+    """Boolean land mask. Lives in `swi.landmask`, re-exported here.
+
+    It must not be reached through `swi.grids`. The LSME export ships this
+    module and not the grid engine, so routing through grids left the exported
+    tree unable to call it.
+    """
+    from .landmask import land_mask as _lm
     return _lm(lat, lon)
 
 
