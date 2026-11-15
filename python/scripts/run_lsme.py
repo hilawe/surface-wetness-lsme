@@ -16,7 +16,7 @@ Usage:
   --era5-ts : use ERA5 skin temperature as a realistic DEVELOPMENT stand-in for
               Ts (not the final independent-IR Ts) instead of the smooth-latitude
               placeholder. With ERA5 also supplying the atmospheric temperature
-              and water vapour, this is a fully realistic end-to-end dry run.
+              and water vapor, this is a fully realistic end-to-end dry run.
   --nominal : ignore ERA5 entirely (constant atmosphere, placeholder Ts).
 
 Default: a July 1998 F-13 descending file (the ~06h morning overpass).

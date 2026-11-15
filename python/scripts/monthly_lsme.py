@@ -76,7 +76,7 @@ def main(argv):
     # Optional 85 GHz scattering screen, EXPERIMENTAL. The threshold must be
     # given explicitly. An earlier version silently applied the superseded
     # July-tuned 8 K when the value was omitted, while the held-out work had
-    # moved to per-combination choices and the evaluation programme had
+    # moved to per-combination choices and the evaluation program had
     # concluded the flagged tail's physical identity (cloud or wet ground) is
     # unresolved, so a bare flag applied an old threshold under durable
     # documentation that oversold it (round-three review).

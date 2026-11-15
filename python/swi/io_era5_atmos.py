@@ -1,9 +1,9 @@
 """Loader for the ERA5 single-level atmospheric fields used by swi.lsme.
 
 Reads the file produced by scripts/fetch_era5_atmos.py (total column water
-vapour, 2 m temperature, skin temperature; 0.25 degree; 00/06/12/18 UTC) and
+vapor, 2 m temperature, skin temperature; 0.25 degree; 00/06/12/18 UTC) and
 delivers a field on the CSU F-13 grid for the first-order atmospheric
-correction. Column water vapour (kg m-2 = mm) feeds swi.lsme.transmissivity.
+correction. Column water vapor (kg m-2 = mm) feeds swi.lsme.transmissivity.
 
 Two design points matter for the emissivity method:
 
@@ -11,11 +11,11 @@ Two design points matter for the emissivity method:
   longitude the local hour of a given UTC time is (utc + lon/15) mod 24, so the
   default 'morning' reduction picks, per longitude column, the synoptic time
   whose local hour is closest to 06 h. 'daymean' (mean over the day) is the
-  simpler fallback; column water vapour has only a weak diurnal cycle so the two
+  simpler fallback; column water vapor has only a weak diurnal cycle so the two
   are close, but the overpass pick is the right convention and matters more once
   the temperature fields are used.
 - ERA5 latitude is stored north-first; we flip it to ascending so it matches the
-  south-first CSU grid before the nearest-neighbour regrid.
+  south-first CSU grid before the nearest-neighbor regrid.
 """
 
 import re
@@ -134,6 +134,6 @@ def field_on_grid(path, var, dst_lat, dst_lon, day=None, mode="morning",
 
 
 def tcwv_on_grid(path, dst_lat, dst_lon, day=None, mode="morning", lst_hour=None):
-    """Total column water vapour (mm) on (dst_lat, dst_lon). See field_on_grid."""
+    """Total column water vapor (mm) on (dst_lat, dst_lon). See field_on_grid."""
     return field_on_grid(path, "tcwv", dst_lat, dst_lon, day=day, mode=mode,
                          lst_hour=lst_hour)

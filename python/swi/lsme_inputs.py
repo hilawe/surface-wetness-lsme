@@ -153,7 +153,7 @@ def build_inputs(csu_path, lat, lon, *,
     # The ERA5 atmosphere must be sampled at the same overpass local time the
     # GridSat skin temperature already uses. Before this was threaded through,
     # era5_field was pinned to the morning anchor, so an ascending (~18h) run
-    # was given ~06h vapour and near-surface temperature.
+    # was given ~06h vapor and near-surface temperature.
     lst_hour = overpass_lst(pass_, sat_id)
     tcwv = None if nominal else era5_field(csu_path, "tcwv", lat, lon,
                                            lst_hour=lst_hour)

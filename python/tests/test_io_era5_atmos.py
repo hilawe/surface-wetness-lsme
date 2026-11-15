@@ -52,7 +52,7 @@ def test_overpass_field_evening_anchor_picks_local_18h():
     """An ascending pass must get evening atmosphere, not the morning default.
 
     Regression guard: era5_field was pinned to the morning anchor, so an ~18h
-    ascending run was handed ~06h vapour and near-surface temperature.
+    ascending run was handed ~06h vapor and near-surface temperature.
     """
     hours = [0.0, 6.0, 12.0, 18.0]
     lon = np.array([0.0, 180.0])

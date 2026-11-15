@@ -64,7 +64,7 @@ def _rank(x):
 
     Tied values receive the average of the ranks they would have occupied. This
     is the standard definition of rank used in Spearman correlation. An ordinal
-    rank (the previous behaviour here) was a real bug on zero-inflated fields:
+    rank (the previous behavior here) was a real bug on zero-inflated fields:
     permuting the tied zeros could swing Spearman from 1.0 to 0.16, because rank
     skill leaked from the spatial ordering inside the ties rather than from the
     retrieval itself.
@@ -90,7 +90,7 @@ def skill_scores(a, b):
     if a.std() > 0 and b.std() > 0:
         out["pearson_r"] = float(np.corrcoef(a, b)[0, 1])
         # spearmanr returns nan if all values in either array are tied; that is
-        # the correct undefined behaviour, propagate it.
+        # the correct undefined behavior, propagate it.
         rho = spearmanr(a, b).statistic
         out["spearman_r"] = float(rho) if np.isfinite(rho) else np.nan
     out["bias"] = float((a - b).mean())
@@ -304,7 +304,7 @@ def block_bootstrap_ci(stat_fn, blocks, n_draws=2000, seed=0, alpha=0.05,
     """Percentile confidence interval for a statistic under block resampling.
 
     stat_fn takes an index array of sample positions and returns a scalar.
-    Neighbouring grid cells are spatially correlated, so resampling individual
+    Neighboring grid cells are spatially correlated, so resampling individual
     cells understates the interval. Whole blocks are resampled instead.
 
     null_value sets the reference the draw fraction is reported against, which

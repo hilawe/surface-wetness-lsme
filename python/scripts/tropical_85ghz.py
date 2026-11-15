@@ -4,8 +4,8 @@ The 31-day validation showed 85V pattern correlation falling toward the equator
 (0.68 tropics, 0.80 midlat, 0.87 high-lat) while the window channels stay high
 everywhere. This script tests the competing explanations directly:
 
-  H1  residual water vapour: stratify the 85V (and 85H, 22V) residual against
-      TELSEM by ERA5 column water vapour. If bias drifts negative and RMSE grows
+  H1  residual water vapor: stratify the 85V (and 85H, 22V) residual against
+      TELSEM by ERA5 column water vapor. If bias drifts negative and RMSE grows
       with tcwv, undercorrected/residual atmosphere is implicated.
   H2  correctable vs not: recompute 85V and 22V with the ERA5 first-order
       atmospheric correction ON and OFF (nominal), same GridSat Ts and domain.
@@ -161,7 +161,7 @@ def main(argv):
     summary["zone_stats"] = zone_stats
 
     # H1: residual vs tcwv, global and tropics, for 85V/85H/22V
-    print("\n=== 85V/85H/22V residual stratified by ERA5 column water vapour ===")
+    print("\n=== 85V/85H/22V residual stratified by ERA5 column water vapor ===")
     strat = {}
     for name, ic in {"85V": 5, "85H": 6, "22V": 2}.items():
         a = e_atm[:, :, ic]; ref = atlas[:, :, ic]
@@ -303,7 +303,7 @@ def main(argv):
 
 def fig_tcwv_strat(strat, out):
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 5))
-    fig.suptitle("85 GHz and 22V emissivity error vs ERA5 column water vapour "
+    fig.suptitle("85 GHz and 22V emissivity error vs ERA5 column water vapor "
                  "(F-13 July 1998, land, vs TELSEM)", fontsize=12)
     colors = {"85V": "#d95f02", "85H": "#e7a", "22V": "#1b9e77"}
     for name, rows in strat.items():
@@ -314,10 +314,10 @@ def fig_tcwv_strat(strat, out):
         a1.plot(xs, bias, "o-", color=c, label=name)
         a2.plot(xs, rmse, "o-", color=c, label=name)
     a1.axhline(0, color="k", lw=0.8, ls=":")
-    a1.set_xlabel("column water vapour (mm)"); a1.set_ylabel("bias (derived - TELSEM)")
+    a1.set_xlabel("column water vapor (mm)"); a1.set_ylabel("bias (derived - TELSEM)")
     a1.set_title("Bias drifts negative as the atmosphere wets up"); a1.legend(); a1.grid(alpha=0.3)
-    a2.set_xlabel("column water vapour (mm)"); a2.set_ylabel("RMSE (emissivity)")
-    a2.set_title("Scatter grows with water vapour"); a2.legend(); a2.grid(alpha=0.3)
+    a2.set_xlabel("column water vapor (mm)"); a2.set_ylabel("RMSE (emissivity)")
+    a2.set_title("Scatter grows with water vapor"); a2.legend(); a2.grid(alpha=0.3)
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     p = os.path.join(out, "tcwv_stratification.png")
     fig.savefig(p, dpi=110); plt.close(fig); print("wrote", p)
@@ -331,9 +331,9 @@ def fig_tcwv_density(e_atm, atlas, tcwv, tropics, out):
     hb = ax.hexbin(x, y, gridsize=50, bins="log", cmap="magma",
                    extent=(10, 70, -0.2, 0.15))
     ax.axhline(0, color="w", lw=1, ls=":")
-    ax.set_xlabel("ERA5 column water vapour (mm)")
+    ax.set_xlabel("ERA5 column water vapor (mm)")
     ax.set_ylabel("85V residual (derived - TELSEM)")
-    ax.set_title("Tropical land: 85V residual vs water vapour\n"
+    ax.set_title("Tropical land: 85V residual vs water vapor\n"
                  "(one-sided negative tail in humid air = scattering near convection)",
                  fontsize=11)
     fig.colorbar(hb, ax=ax, label="log10 count")

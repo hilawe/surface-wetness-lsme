@@ -9,7 +9,7 @@ arrives:
 
     skin temperature  Ts          -> Ken's GridSat-B1 cloud-cleared T_s
     clear-sky mask    clear        -> Ken's ESDS machine-learning cloud mask
-    column water vapour  tcwv      -> ERA5 (optional; refines the correction)
+    column water vapor  tcwv      -> ERA5 (optional; refines the correction)
 
 Physics (single isothermal layer, no scattering, Prigent and Rossow lineage).
 Top-of-atmosphere brightness temperature for a surface (emissivity e, skin
@@ -27,7 +27,7 @@ Solving for the surface emissivity, with A = Ta*(1-tau):
 
 The nominal transmissivities and absorption coefficients below are first-order
 placeholders chosen so the window channels stay near-transparent and 22 GHz (on
-the water-vapour line) is the most opaque. They are good enough to show the dry
+the water-vapor line) is the most opaque. They are good enough to show the dry
 versus wet emissivity contrast (Step 2); a MonoRTM-class forward model replaces
 them only if the first cut is promising (Step 6).
 """
@@ -42,12 +42,12 @@ INCIDENCE_DEG = 53.1
 AIRMASS = 1.0 / np.cos(np.deg2rad(INCIDENCE_DEG))
 
 # Nominal clear-sky one-way nadir optical depth per Basist channel, split into a
-# dry/oxygen baseline and a water-vapour term (per mm of column water vapour).
+# dry/oxygen baseline and a water-vapor term (per mm of column water vapor).
 # Order: 19V 19H 22V 37V 37H 85V 85H.
 TAU_DRY = np.array([0.030, 0.030, 0.040, 0.050, 0.050, 0.100, 0.100])
 KWV_PER_MM = np.array([0.0007, 0.0007, 0.0040, 0.0015, 0.0015, 0.0060, 0.0060])
 
-# Nominal transmissivity used when no column water vapour is supplied (a dry,
+# Nominal transmissivity used when no column water vapor is supplied (a dry,
 # morning-overpass first cut: ~25 mm pwv folded into the baseline).
 NOMINAL_TCWV_MM = 25.0
 
@@ -55,7 +55,7 @@ NOMINAL_TCWV_MM = 25.0
 def transmissivity(tcwv_mm=None):
     """Per-channel clear-sky transmissivity (length-7 vector).
 
-    tcwv_mm may be a scalar or an array of total column water vapour in mm. With
+    tcwv_mm may be a scalar or an array of total column water vapor in mm. With
     None, NOMINAL_TCWV_MM is used. Returns transmissivity broadcast over the
     input shape with a trailing length-7 channel axis.
     """
@@ -107,7 +107,7 @@ def apparent_emissivity(tb, ts):
 
 
 # Historical 85 GHz scattering-screen threshold (Kelvin). THE SCREEN IS
-# EXPERIMENTAL and this value is superseded: the 2026-08 evaluation programme
+# EXPERIMENTAL and this value is superseded: the 2026-08 evaluation program
 # found no material advantage for SI37 over a simpler 85V-only rule, could not
 # identify what the flagged low-85V tail physically is (cloud or wet ground,
 # unresolved in either direction), and chose per-combination thresholds by a
@@ -182,7 +182,7 @@ def tune_si37_threshold(tb_tune, candidates=None, target_keep_fraction=0.98):
 
     Notes
     -----
-    A target_keep_fraction near 0.98 reproduces the operational behaviour of
+    A target_keep_fraction near 0.98 reproduces the operational behavior of
     the original 8.0 K choice on F-13 July 1998 (which kept about 98 percent
     of clear-land pixels) without using TELSEM. Choosing lower values screens
     more aggressively at the cost of dropping more clean pixels.
@@ -221,7 +221,7 @@ def derive_emissivity(tb, ts, clear=None, tcwv_mm=None, t_atm=None, lapse=10.0,
     clear : (...) bool array or None. True where the pixel is clear sky. PLUG-IN:
          Ken's ESDS machine-learning cloud mask. None treats every valid pixel as
          clear (development only).
-    tcwv_mm : (...) array, scalar, or None. Total column water vapour in mm.
+    tcwv_mm : (...) array, scalar, or None. Total column water vapor in mm.
          PLUG-IN: ERA5 (task b). None uses the nominal dry-atmosphere default.
     t_atm : (...) array or None. Effective single-layer atmospheric temperature in
          Kelvin (for example ERA5 2 m temperature). None falls back to ts - lapse.
