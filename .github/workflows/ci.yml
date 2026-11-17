@@ -19,3 +19,9 @@ jobs:
       - name: Run tests
         working-directory: python
         run: python -m pytest tests -q
+      - name: Import every script
+        working-directory: python
+        run: |
+          for f in scripts/*.py; do
+            python -c "import importlib; importlib.import_module('scripts.$(basename "$f" .py)')"
+          done

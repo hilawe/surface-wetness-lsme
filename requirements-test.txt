@@ -3,3 +3,5 @@ scipy
 netCDF4
 pytest
 global-land-mask
+# The figure scripts under python/scripts import this when they load.
+matplotlib
