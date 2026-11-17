@@ -20,7 +20,6 @@ Variable names are `fcdr_<base>_<asc|dsc>`; fill is -9999.9.
 import numpy as np
 
 from .channels import N_CHANNELS
-from . import core_numpy
 
 # Base channel names (without the fcdr_ prefix or _asc/_dsc suffix), in Basist
 # order P1..P7 = 19V 19H 22V 37V 37H 85V 85H.
@@ -88,13 +87,37 @@ def read_channels(path, pass_="asc", sensor=None):
     return lat, lon, tb, sensor
 
 
-def evaluate_file(path, pass_="asc", sensor=None, engine=core_numpy):
+def _default_engine():
+    """The decision-tree engine, loaded when it is first asked for.
+
+    This reader ships in published subsets that carry different sets of
+    modules, and one of them has no engine. Loading the engine with the
+    module made the whole reader unimportable there, so `read_channels`
+    failed for a caller that never wanted the engine. It is loaded here
+    instead, and a tree without it is told so in plain words.
+    """
+    try:
+        from . import core_numpy
+    except ImportError as exc:
+        raise ImportError(
+            "evaluate_file needs the decision-tree engine (swi.core_numpy), "
+            "which this tree does not carry. Pass engine= explicitly, or "
+            "use read_channels, which needs no engine.") from exc
+    return core_numpy
+
+
+def evaluate_file(path, pass_="asc", sensor=None, engine=None):
     """Read a CSU ICDR-GRID file and run the engine for one pass.
+
+    `engine` defaults to the NumPy decision tree, `swi.core_numpy`, which
+    is resolved before the file is opened.
 
     Returns a dict with lat, lon, sensor, pass, and the output grids temp/wet/
     snow/ret (nlat x nlon), filled with NaN (temp/wet) or -128 (snow/ret) where
     no valid input existed.
     """
+    if engine is None:
+        engine = _default_engine()
     lat, lon, tb, sensor = read_channels(path, pass_=pass_, sensor=sensor)
     nlat, nlon = lat.size, lon.size
 
