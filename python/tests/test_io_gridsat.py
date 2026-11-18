@@ -22,7 +22,7 @@ def test_path_builder():
     p = ig.gridsat_cld_path("/path/to/swi_data/data/gridsat_cld/isccp", 1998, 7, 15, 6)
     assert p.endswith("/GRIDSAT-CLOUD.1998.07.15.06.nc")
     # old probe layout still available
-    q = ig.gridsat_cld_path("/store/isccp/gridsat/data", 1985, 1, 1, 6,
+    q = ig.gridsat_cld_path("/archive/gridsat/data", 1985, 1, 1, 6,
                             prefix="GRIDSAT-B1", suffix=".v02r01.nc", year_subdir=True)
     assert q.endswith("1985/GRIDSAT-B1.1985.01.01.06.v02r01.nc")
     # ML mask path

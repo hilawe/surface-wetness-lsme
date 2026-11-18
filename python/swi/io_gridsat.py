@@ -23,7 +23,7 @@ microwave grid, and area-averages (downsamples) onto the F-13 0.25 degree grid,
 returning the skin temperature and a clear-sky boolean mask ready for
 ``swi.lsme.derive_emissivity``.
 
-The older `/store/isccp/gridsat` probe files used the name GRIDSAT-B1.<...>.v02r01.nc
+The older archive layout used the name GRIDSAT-B1.<...>.v02r01.nc
 under per-year subdirectories; gridsat_cld_path supports both layouts.
 """
 
@@ -53,7 +53,7 @@ def gridsat_cld_path(root, year, month, day, hour=OVERPASS_HOUR_UTC,
 
     Defaults to Ken's flat 1998 layout (`GRIDSAT-CLOUD.<...>.nc`). Set
     prefix="GRIDSAT-B1", suffix=".v02r01.nc", year_subdir=True for the older
-    `/store/isccp/gridsat` probe files.
+    archive layout.
     """
     name = f"{prefix}.{year:04d}.{month:02d}.{day:02d}.{hour:02d}{suffix}"
     if year_subdir:
@@ -163,7 +163,7 @@ def day_overpass_on_grid(root, year, month, day, dst_lat, dst_lon,
                          return_lst_delta=False):
     """Morning-overpass Ts and clear mask from a day of GridSat files.
 
-    PER-CELL slot selection (F2 review fix): for each (lat, lon) cell, pick the
+    PER-CELL slot selection. For each (lat, lon) cell, pick the
     3-hourly slot that is BOTH clear at that cell AND closest to
     `lst_target` local solar time. The previous per-longitude pick took the
     nearest slot whether or not it was clear, so a cell could be marked missing
@@ -181,7 +181,7 @@ def day_overpass_on_grid(root, year, month, day, dst_lat, dst_lon,
     """
     dst_lon = np.asarray(dst_lon, dtype=np.float64)
     ts_stack, clear_stack, have = [], [], []
-    skipped_ml_missing = 0   # F4 review fix: count silent ISCCP fallbacks
+    skipped_ml_missing = 0   # hours skipped because the requested mask is missing
     for h in hours:
         p = gridsat_cld_path(root, year, month, day, h)
         if not os.path.exists(p):
@@ -194,7 +194,7 @@ def day_overpass_on_grid(root, year, month, day, dst_lat, dst_lon,
             elif allow_isccp_fallback:
                 # Caller explicitly opted in to mixing ML and ISCCP cloud-mask
                 # definitions in the same monthly product. Use ISCCP at this
-                # hour, but warn and count it.
+                # hour, and warn about the mixed mask definitions.
                 import warnings
                 warnings.warn(
                     f"GridSat ML mask missing at {year}-{month:02d}-{day:02d} "

@@ -7,7 +7,7 @@ ERA5 atmospheric correction, so the GridSat-Ts contribution is cleanly isolated
 per channel at monthly scale. Then validates both against the real TELSEM2 July
 climatology and writes a set of diagnostic figures plus a stats JSON.
 
-Usage (in the JupyterHub env):
+Usage (where the full GridSat archive is mounted):
     python -m scripts.validation_deepdive \
         --gridsat-root /path/to/swi_data/data/gridsat_cld --out ../scratch/deepdive
 

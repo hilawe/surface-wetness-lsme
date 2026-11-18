@@ -16,7 +16,7 @@ Usage:
 
 Defaults reproduce the original 5-day Mac sample when pointed at the 5-day
 GridSat subset; pass --gridsat-root /path/to/swi_data/data/gridsat_cld in the
-JupyterHub env to run the full month straight off the GridSat archive. With
+compute environment to run the full month straight off the GridSat archive. With
 --days omitted (or "all") the day list is auto-discovered from the F-13 files
 present in --f13-dir, so the composite uses every July day on disk.
 """
@@ -79,7 +79,7 @@ def main(argv):
     # moved to per-combination choices and the evaluation program had
     # concluded the flagged tail's physical identity (cloud or wet ground) is
     # unresolved, so a bare flag applied an old threshold under durable
-    # documentation that oversold it (round-three review).
+    # documentation that oversold it.
     scatter_k = None
     if "--scatter-screen" in argv:
         i = argv.index("--scatter-screen")

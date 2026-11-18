@@ -35,9 +35,9 @@ DEFAULT_PASS = "dsc"
 
 from swi import lsme_inputs as _lsme_inputs
 
-# These helpers now live in swi.lsme_inputs (A2 architecture cleanup); keep
-# thin re-exports here so the existing scripts that import from run_lsme keep
-# working unchanged.
+# These helpers live in swi.lsme_inputs. Thin re-exports are kept here so
+# that the existing scripts that import from run_lsme keep working
+# unchanged.
 placeholder_skin_temperature = _lsme_inputs.placeholder_skin_temperature
 era5_field = _lsme_inputs.era5_field
 

@@ -37,8 +37,7 @@ def test_combine_mean_and_agreement():
 
 def test_shared_support_excludes_one_sided_cells():
     """Cells where one estimator is missing must be excluded from the shared
-    support; otherwise the F1 bug (different-population percentiles) creeps
-    back in.
+    support. Otherwise the two percentiles refer to different populations.
     """
     thermal = np.array([[1.0, 2.0, np.nan, 4.0]])
     micro = np.array([[5.0, np.nan, 7.0, 8.0]])
@@ -50,7 +49,7 @@ def test_shared_support_excludes_one_sided_cells():
 
 def test_joint_indices_rank_over_shared_support():
     """Both estimator percentiles must reference the SAME shared-support
-    population so a cell-wise comparison is meaningful. This is the F1 fix.
+    population so a cell-wise comparison is meaningful.
     """
     # 5 cells, but only 3 have BOTH estimators finite; the other 2 are
     # one-sided and must be NaN on output.

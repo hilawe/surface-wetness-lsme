@@ -2,8 +2,8 @@
 
 The LSME-driver scripts used to call into `scripts/run_lsme.py` for the shared
 helpers (`gridsat_ts`, `era5_field`, `build_inputs`), so the scripts imported
-each other and faked `sys.argv` to drive `build_inputs`. An independent review
-flagged that pattern as a drift source. This module is the library form, with
+each other and faked `sys.argv` to drive `build_inputs`, a pattern that
+invites drift between them. This module is the library form, with
 explicit keyword arguments rather than CLI-flag parsing. `scripts/run_lsme.py`
 still owns the CLI front end and now delegates to these helpers.
 
@@ -29,7 +29,7 @@ import numpy as np
 
 from . import io_era5_atmos, io_gridsat, telsem
 
-# F3 review fix: per-pass local-solar-time anchor for the GridSat overpass slot.
+# Per-pass local-solar-time anchor for the GridSat overpass slot.
 # Descending = morning for the morning chain (F-08/F-11/F-13/F-17), 3-4 hours
 # later for the late-morning chain (F-10/F-14/F-15/F-16/F-18). When the
 # satellite is unknown the morning-chain LSTs are used with a warning.

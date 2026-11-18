@@ -44,7 +44,7 @@ def composite(f13dir, gridsat_root, year, month, days, pass_="dsc"):
     isccp, ml = thermal.split_root(gridsat_root)
     ym = f"{year}{month:02d}"
     se = ce = sdt = cdt = lat = lon = None
-    n_joint_19vh = None   # joint 19V-AND-19H day count, see the F1 review fix
+    n_joint_19vh = None   # joint 19V-AND-19H day count, see the support gate below
     used = []
     for dd in days:
         f13 = os.path.join(f13dir, f"CSU_SSMI_FCDR-GRID_V02R00_F13_D{ym}{dd}.nc")
@@ -94,7 +94,7 @@ def main(argv):
     land = telsem.land_mask(lat, lon)
     pd = e_m[:, :, 0] - e_m[:, :, 1]                       # 19 GHz V - H
 
-    # F1 review fix: enforce a minimum-support gate BEFORE rank normalization, so
+    # Enforce a minimum-support gate BEFORE rank normalization, so
     # a cell with one clear day is not ranked with the same authority as a full
     # month. min_days applies to BOTH the thermal-dT support and the joint-19VH
     # support that the V-H polarization difference comes from. The threshold is
@@ -105,7 +105,7 @@ def main(argv):
     dT_m_g = np.where(enough, dT_m, np.nan)
     pd_g = np.where(enough, pd, np.nan)
 
-    # F1 review fix: rank-normalize both estimators over the SHARED support, not
+    # Rank-normalize both estimators over the SHARED support, not
     # over each estimator's own clear-sky support, so the percentiles on a
     # shared cell reference the same population.
     thermal_wet, micro_wet, shared = two_estimator.joint_indices(

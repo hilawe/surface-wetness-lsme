@@ -61,7 +61,7 @@ def wetness_index(field, mask, wet_is_low=True):
 def shared_support_mask(thermal_field, microwave_field, land_mask):
     """Cells where BOTH estimators have finite data on land.
 
-    An independent review caught a real bug: rank-normalizing each estimator over
+    An earlier version had a bug here. Rank-normalizing each estimator over
     its own clear-sky support and then comparing them cell by cell makes the
     percentiles on a shared cell reference different populations, biasing both
     `combined_wetness` and `agreement`. Ranking both estimators over the

@@ -152,8 +152,8 @@ def tune_si37_threshold(tb_tune, candidates=None, target_keep_fraction=0.98):
 
     The screen is intended to remove obvious ice-scattering pixels (large
     positive 37V-minus-85V depressions) while keeping near-all the rest. Tuning
-    on a target keep-fraction of the tuning data avoids the circularity flagged
-    by the 2026-06-26 adversarial review (the previous 8.0 K default was chosen
+    on a target keep-fraction of the tuning data avoids a circularity
+    (the previous 8.0 K default was chosen
     on TELSEM agreement, which is the same reference the screened result is
     then reported against). Here we pick the threshold from a CDF of the
     in-data scattering-index distribution: the threshold is the value at the
