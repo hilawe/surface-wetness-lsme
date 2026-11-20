@@ -6,12 +6,13 @@ Forward research toward a long-term land surface microwave emissivity record
 derived from two NOAA-stewarded climate data record inputs. The microwave side
 is the Colorado State University Special Sensor Microwave/Imager (SSM/I) and
 Special Sensor Microwave Imager/Sounder (SSMIS) Brightness Temperature
-Fundamental Climate Data Record. The infrared side is the NOAA GridSat-B1
-cloud-cleared infrared product (Knapp 2011), which provides the independent
+Fundamental Climate Data Record (Berg et al. 2018). The infrared side is the NOAA GridSat-B1
+cloud-cleared infrared product (Knapp et al. 2011), which provides the independent
 land surface skin temperature and the clear-sky mask. The two are combined
 through the microwave + infrared emissivity inversion of Prigent, Rossow,
 Aires, and colleagues, with a first-order ERA5 single-levels atmospheric
-correction, validated against the TELSEM2 climatology (Aires et al. 2011).
+correction, validated against the TELSEM2 climatology (Aires et al. 2011;
+Wang et al. 2017).
 
 The work also implements a second, independent estimator of surface wetness
 from the same GridSat-B1 record: the thermal-inertia diurnal infrared range,
@@ -23,7 +24,7 @@ climate record reports.
 A sustained, observational, multi-decadal LSME record released as a
 monitored climate variable does not exist (Hu et al. 2026 acknowledges the
 gap in the nearest competitor's own words; see also Aires et al. 2011 and
-Prigent et al. 2003 for the method and atlas). The defensible wedge is
+Prigent et al. 2006 for the method and atlas). The defensible wedge is
 sustained NOAA stewardship and the use of two NOAA-controlled CDR inputs.
 
 ## Status
@@ -112,16 +113,23 @@ but otherwise stand alone.
   (2011). A Tool to Estimate Land-Surface Emissivities at Microwave
   frequencies (TELSEM) for use in numerical weather prediction. Quarterly
   Journal of the Royal Meteorological Society 137(656), 690 to 699.
-- Berg, W. and C. Kummerow (2018). Multisatellite intercalibrated CDR of
-  brightness temperatures. Remote Sensing 10(8), 1306.
-- Hu, J., et al. (2026). A harmonized multi-sensor land surface emissivity
-  framework from GMI, AMSR2, and FY-3 MWRI with geostationary cloud masks.
+- Berg, W., R. Kroodsma, C. D. Kummerow, and D. S. McKague (2018).
+  Fundamental climate data records of microwave brightness temperatures.
+  Remote Sensing 10(8), 1306.
+- Hu, J., R. Li, P. Zhang, Y. Wang, S. Wu, H. Letu, and F. Weng (2026).
+  Global retrieval of harmonized microwave land surface emissivity
+  leveraging multi-sensor measurements from GMI, AMSR2 and MWRIs.
   Remote Sensing of Environment 334, 115169.
-- Knapp, K. R. (2011). Globally Gridded Satellite (GridSat) Observations
-  for Climate Studies. Journal of Climate 24(20), 5275 to 5290.
-- Prigent, C., F. Aires, and W. B. Rossow (2003). Land surface microwave
+- Knapp, K. R., and Coauthors (2011). Globally gridded satellite
+  observations for climate studies. Bulletin of the American
+  Meteorological Society 92(7), 893 to 907.
+- Prigent, C., F. Aires, and W. B. Rossow (2006). Land surface microwave
   emissivities over the globe for a decade. Bulletin of the American
-  Meteorological Society 84(11), 1573 to 1584.
+  Meteorological Society 87(11), 1573 to 1584.
+- Wang, D., and Coauthors (2017). Surface emissivity at microwaves to
+  millimeter waves over polar regions: Parameterization and evaluation with
+  aircraft experiments. Journal of Atmospheric and Oceanic Technology 34(5),
+  1039 to 1059.
 
 ## License
 
